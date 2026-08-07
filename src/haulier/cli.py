@@ -306,6 +306,34 @@ def licences(
 
 
 @app.command()
+def render_digest(
+    records: Path = typer.Option(
+        Path("data/pilot/records.json"), help="Extracted records JSON."
+    ),
+    out_dir: Path = typer.Option(Path("data/pilot"), help="Where to write digest.html/.csv."),
+    redact: bool = typer.Option(
+        False, help="Redact people to initials — required for the public sample (PLAN §2.11)."
+    ),
+) -> None:
+    """Render a digest HTML + CSV from extracted records (the Stage 0 pilot)."""
+    from .digest.leads import build_lead
+    from .digest.render import render_csv, render_html, subject_line
+
+    release = json.loads(records.read_text(encoding="utf-8"))
+    leads = [build_lead(r, release) for r in release["records"]]
+
+    suffix = "_redacted" if redact else ""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    html_path = out_dir / f"digest_{release['release_no']}{suffix}.html"
+    csv_path = out_dir / f"digest_{release['release_no']}{suffix}.csv"
+    html_path.write_text(render_html(release, leads, redact=redact), encoding="utf-8")
+    csv_path.write_text(render_csv(release, leads, redact=redact), encoding="utf-8")
+
+    console.print(f"Subject: [bold]{subject_line(release, leads)}[/]")
+    console.print(f"{len(leads)} leads → {html_path} + {csv_path}")
+
+
+@app.command()
 def probe(path: Path = typer.Argument(..., help="Path to a PDF.")) -> None:
     """Probe a single PDF for page count and text-layer presence."""
     result = probe_pdf(path)
