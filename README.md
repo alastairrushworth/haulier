@@ -26,6 +26,9 @@ uv run haulier releases              # releases live on the lead region's page
 uv run haulier capture               # download + fingerprint the lead region
 uv run haulier capture --all         # all eight areas (~250 PDFs)
 uv run haulier status                # what has been captured locally
+uv run haulier dump --all            # extract + cache per-page text (idempotent)
+uv run haulier headings --all        # heading frequency table → section_heading_map seed
+uv run haulier licences --all        # licence-number harvest → regex + prefix-map validation
 ```
 
 Captured documents land in `data/` and are gitignored — they are public data under the Open
@@ -36,21 +39,29 @@ object storage rather than the repo.
 
 Measured against live GOV.UK data rather than assumed (details in `PLAN.md` §1):
 
+Distinct licence numbers per release, measured over the full 2026 corpus (~31
+releases per region; home-prefix share is ≥99.6% everywhere):
+
 | Traffic area | Licences/release | Prefix |
 |---|---:|---|
-| East of England *(lead)* | 167.2 | `OF` |
-| North East England | 112.0 | `OB` |
-| West of England | 94.5 | `OH` |
-| West Midlands | 89.5 | `OD` |
-| North West England | 88.0 | `OC` |
-| London & South East | 81.5 | `OK` |
-| Scotland | 48.2 | `OM` |
-| Wales | 32.2 | `OG` |
+| East of England *(lead)* | 154.9 | `OF` |
+| North East England | 105.9 | `OB` |
+| West of England | 98.9 | `OH` |
+| West Midlands | 90.5 | `OD` |
+| North West England | 89.4 | `OC` |
+| London & South East | 79.0 | `OK` |
+| Scotland | 42.8 | `OM` |
+| Wales | 36.8 | `OG` |
 
 - Publication is **weekly** per region on region-specific weekdays, not fortnightly.
 - Releases are PDFs, discoverable through the GOV.UK Content API — no HTML scraping.
-- Documents are structured around **statutory section references** (`S13` new application,
-  `S17` variation, `S26`/`S27`/`S28` disciplinary), identically across all eight regions.
+- Documents have a **two-level structure**, identical across all eight regions: numbered
+  top-level sections ("Section 1 – Applications Received" … "Section 6 – Operating Centre
+  Reviews"), with **statutory markers** (`S13` new application, `S17` variation,
+  `S26`/`S27`/`S28` disciplinary, `Sch.3` transport-manager repute) nested inside the
+  decision sections. New applications carry no statutory marker — they live in Section 1.
+- Stream membership comes from the **`AD`/`NP` title prefix, not the page** — PSV documents
+  occasionally stray onto the goods pages. Title separators drift (`AD - 6720` / `AD_6720`).
 - Only the current year stays on the live pages; earlier years move to the National Archives.
 
 ## Attribution

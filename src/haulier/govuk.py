@@ -3,12 +3,20 @@
 The guidance pages expose a structured attachment list at /api/content/<path>,
 so the watcher never needs to scrape HTML (PLAN.md §1.3). Each attachment
 carries url, filename, content_type, file_size, number_of_pages and an
-`accessible` flag — the last of which is GOV.UK's own signal that a PDF lacks a
-proper text layer, giving us a pre-flight warning before download.
+`accessible` flag. The flag reports formal accessibility compliance only — it
+is NOT a text-layer signal (PLAN.md §1.3); the pdfplumber probe is the only
+ground truth for extractability.
 
 Release number and publication date live in the attachment *title*, not in a
 dedicated field, so they are parsed here. A title that will not parse is
 recorded as unparsed rather than guessed at (spec §5.3[1]).
+
+Two things learned from unparsed titles in the wild (Aug 2026):
+  * PSV "Notices and Proceedings" (NP) documents occasionally appear on the
+    goods pages — NP-2465 on Scotland's, NP-3198 on West Midlands'. The page
+    does not guarantee the stream; the AD/NP title prefix does.
+  * The separator drifts: "AD - 6720" and "AD_6720" both occur (the
+    underscore form first seen North East & Wales, 5 Aug 2026).
 """
 
 from __future__ import annotations
@@ -26,9 +34,11 @@ from .sources import TrafficArea
 
 # Observed across all 8 regions, e.g.
 #   "AD - 7167 31 July 2026 (objection deadline 21 August 2026)"
+#   "AD_6720 05 August 2026 (objection deadline 26 August 2026)"
+#   "NP - 2465 06 April 2026 (objection deadline 27 April 2026)"   <- PSV
 _TITLE_RE = re.compile(
     r"""
-    AD \s* [-‐-―] \s* (?P<release>\d+)      # "AD - 7167"
+    (?P<kind>AD|NP) \s* [-‐-―_] \s* (?P<release>\d+)      # "AD - 7167" / "AD_6720"
     \s+ (?P<published>\d{1,2}\s+\w+\s+\d{4})          # "31 July 2026"
     (?: .*? objection \s+ deadline \s+
         (?P<deadline>\d{1,2}\s+\w+\s+\d{4}) )?        # optional deadline
@@ -62,6 +72,14 @@ class Attachment:
     release_no: str | None = None
     published_on: date | None = None
     objection_deadline: date | None = None
+    doc_type: str | None = None
+    """'AD' (goods) or 'NP' (PSV) from the title prefix; None when unparsed."""
+
+    @property
+    def is_goods(self) -> bool:
+        """PSV documents stray onto the goods pages; the title prefix is the
+        stream membership test, not the page (see module docstring)."""
+        return self.doc_type != "NP"
 
     @property
     def parsed(self) -> bool:
@@ -80,8 +98,9 @@ class Attachment:
 def _attachment_from_json(region_slug: str, raw: dict[str, Any]) -> Attachment:
     title = str(raw.get("title", ""))
     match = _TITLE_RE.search(title)
-    release_no = published_on = deadline = None
+    release_no = published_on = deadline = doc_type = None
     if match:
+        doc_type = match.group("kind").upper()
         release_no = match.group("release")
         published_on = _parse_uk_date(match.group("published"))
         if match.group("deadline"):
@@ -99,6 +118,7 @@ def _attachment_from_json(region_slug: str, raw: dict[str, Any]) -> Attachment:
         release_no=release_no,
         published_on=published_on,
         objection_deadline=deadline,
+        doc_type=doc_type,
     )
 
 

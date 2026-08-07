@@ -81,8 +81,11 @@ def capture_area(
     limit: int | None = None,
     probe: bool = True,
 ) -> list[CapturedRelease]:
-    """Fetch every PDF release currently advertised for one traffic area."""
-    attachments = [a for a in client.attachments(area) if a.is_pdf]
+    """Fetch every goods PDF release currently advertised for one traffic area.
+
+    Stray PSV (NP-prefixed) documents are excluded — the title prefix, not the
+    page, decides stream membership (see govuk.py module docstring)."""
+    attachments = [a for a in client.attachments(area) if a.is_pdf and a.is_goods]
     if limit is not None:
         attachments = attachments[-limit:]
 

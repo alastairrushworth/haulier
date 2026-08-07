@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import sources
+from . import recon, sources, textdump
 from .capture import capture_area, manifest_path, probe_pdf
 from .config import settings
 from .govuk import GovUkClient
@@ -58,7 +58,14 @@ def releases(
     """List releases currently advertised for a traffic area (no download)."""
     area = sources.resolve(region)
     with GovUkClient() as client:
-        found = [a for a in client.attachments(area) if a.is_pdf]
+        pdfs = [a for a in client.attachments(area) if a.is_pdf]
+    found = [a for a in pdfs if a.is_goods]
+    stray = [a for a in pdfs if not a.is_goods]
+    if stray:
+        console.print(
+            f"[bold yellow]{len(stray)} PSV (NP) document(s) on this goods page, "
+            "excluded:[/] " + ", ".join(a.title for a in stray)
+        )
 
     table = Table(title=f"{area.name} — {len(found)} releases live", header_style="bold")
     table.add_column("Release")
@@ -157,6 +164,145 @@ def status() -> None:
         )
     console.print(table)
     console.print(f"Data dir: {settings().data_dir.resolve()}  •  {total} releases captured")
+
+
+def _ensure_dumps(areas: list[sources.TrafficArea], workers: int | None) -> None:
+    """Build any missing/stale text dumps before an analysis command runs."""
+    jobs = [job for area in areas for job in textdump.stale_jobs(area)]
+    if not jobs:
+        return
+    console.print(f"Extracting text from {len(jobs)} release(s) …")
+    for done, (pdf_path, _pages, error) in enumerate(
+        textdump.build_dumps(jobs, workers=workers), start=1
+    ):
+        if error:
+            console.print(f"  [bold red]FAILED[/] {pdf_path}: {error}")
+        elif done % 25 == 0 or done == len(jobs):
+            console.print(f"  {done}/{len(jobs)}")
+
+
+def _write_recon(name: str, payload: dict) -> Path:
+    path = settings().data_dir / "recon" / f"{name}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+@app.command()
+def dump(
+    region: list[str] = typer.Option(None, "--region", "-r", help="Repeatable."),
+    all_regions: bool = typer.Option(False, "--all", help="All eight areas."),
+    workers: int = typer.Option(None, "-w", "--workers", help="Parallel extraction workers."),
+) -> None:
+    """Extract and cache per-page text for captured releases (idempotent)."""
+    _ensure_dumps(_areas(region, all_regions), workers)
+    console.print("[bold green]Text dumps up to date.[/]")
+
+
+@app.command()
+def headings(
+    region: list[str] = typer.Option(None, "--region", "-r", help="Repeatable."),
+    all_regions: bool = typer.Option(False, "--all", help="All eight areas."),
+    top: int = typer.Option(15, help="Rows to show per region."),
+    workers: int = typer.Option(None, "-w", "--workers"),
+) -> None:
+    """Heading frequency table per region — seeds section_heading_map (Stage 0.3)."""
+    targets = _areas(region, all_regions)
+    _ensure_dumps(targets, workers)
+
+    combined: dict[str, dict] = {}
+    for area in targets:
+        stats = recon.analyse_headings(list(textdump.iter_dumps(area)))
+        combined[area.slug] = recon.headings_payload(stats)
+
+        table = Table(
+            title=f"{area.name} — S-markers across {stats.releases} releases",
+            header_style="bold",
+        )
+        table.add_column("Marker")
+        table.add_column("Occurrences", justify="right")
+        table.add_column("Releases", justify="right")
+        for marker in sorted(stats.markers, key=lambda m: (len(m), m)):
+            table.add_row(
+                marker, str(stats.markers[marker]), str(len(stats.marker_releases[marker]))
+            )
+        console.print(table)
+
+        heads = Table(title=f"{area.name} — top headings", header_style="bold")
+        heads.add_column("Releases", justify="right")
+        heads.add_column("Occurrences", justify="right")
+        heads.add_column("Heading", overflow="fold")
+        shown = 0
+        for text, count in stats.headings.most_common():
+            n_releases = len(stats.heading_releases[text])
+            if n_releases < 2:
+                continue
+            heads.add_row(str(n_releases), str(count), text)
+            shown += 1
+            if shown >= top:
+                break
+        console.print(heads)
+
+    path = _write_recon("headings", combined)
+    console.print(f"Full table → [bold]{path}[/]")
+
+
+@app.command()
+def licences(
+    region: list[str] = typer.Option(None, "--region", "-r", help="Repeatable."),
+    all_regions: bool = typer.Option(False, "--all", help="All eight areas."),
+    workers: int = typer.Option(None, "-w", "--workers"),
+) -> None:
+    """Licence-number harvest — validates the regex and prefix map (Stage 0.4)."""
+    targets = _areas(region, all_regions)
+    _ensure_dumps(targets, workers)
+
+    table = Table(title="Licence-number harvest", header_style="bold")
+    table.add_column("Region")
+    table.add_column("Releases", justify="right")
+    table.add_column("Distinct", justify="right")
+    table.add_column("Mean/release", justify="right")
+    table.add_column("Home prefix %", justify="right")
+    table.add_column("Foreign", justify="right")
+
+    combined: dict[str, dict] = {}
+    all_near_misses: dict[str, dict] = {}
+    for area in targets:
+        stats = recon.analyse_licences(list(textdump.iter_dumps(area)))
+        payload = recon.licences_payload(stats, area)
+        combined[area.slug] = payload
+
+        share = payload["home_prefix_share"]
+        table.add_row(
+            area.slug,
+            str(payload["releases"]),
+            str(payload["distinct_total"]),
+            str(payload["mean_distinct_per_release"]),
+            f"{share * 100:.2f}" if share is not None else "-",
+            str(len(payload["foreign"])),
+        )
+        for row in payload["near_miss_shapes"]:
+            entry = all_near_misses.setdefault(
+                row["shape"], {"occurrences": 0, "example": row["example"]}
+            )
+            entry["occurrences"] += row["occurrences"]
+    console.print(table)
+
+    if all_near_misses:
+        near = Table(
+            title="Near-miss shapes (caught by loose sweep, rejected by the spec regex)",
+            header_style="bold",
+        )
+        near.add_column("Shape")
+        near.add_column("Occurrences", justify="right")
+        near.add_column("Example")
+        ranked = sorted(all_near_misses.items(), key=lambda kv: -kv[1]["occurrences"])
+        for shape, entry in ranked[:15]:
+            near.add_row(shape, str(entry["occurrences"]), entry["example"])
+        console.print(near)
+
+    path = _write_recon("licences", combined)
+    console.print(f"Full harvest → [bold]{path}[/]")
 
 
 @app.command()
