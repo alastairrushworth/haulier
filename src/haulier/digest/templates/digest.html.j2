@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1d21;">
+<div style="max-width:640px;margin:0 auto;padding:16px;">
+
+  <div style="background:#0b3d62;color:#ffffff;border-radius:8px 8px 0 0;padding:20px 24px;">
+    <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.8;">FirstMover — weekly operator-licence leads</div>
+    <div style="font-size:21px;font-weight:700;margin-top:6px;">{{ region_name }} — A&amp;D {{ release_no }}</div>
+    <div style="font-size:14px;margin-top:4px;opacity:0.9;">Published {{ published_on }} · Objection deadline {{ objection_deadline }}</div>
+  </div>
+
+  <div style="background:#ffffff;padding:18px 24px;border-left:1px solid #e2e5e9;border-right:1px solid #e2e5e9;">
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tr>
+        {% for count, caption in summary %}
+        <td style="text-align:center;padding:6px 4px;">
+          <div style="font-size:22px;font-weight:700;color:#0b3d62;">{{ count }}</div>
+          <div style="color:#5b6470;">{{ caption }}</div>
+        </td>
+        {% endfor %}
+      </tr>
+    </table>
+  </div>
+
+  {% for group in groups %}
+  <div style="background:#ffffff;padding:8px 24px 4px;border-left:1px solid #e2e5e9;border-right:1px solid #e2e5e9;">
+    <div style="font-size:15px;font-weight:700;color:#0b3d62;border-bottom:2px solid #0b3d62;padding:10px 0 6px;">
+      {{ group.heat }} {{ group.title }} · {{ group.leads | length }}
+    </div>
+    {% for lead in group.leads %}
+    <div style="padding:12px 0;border-bottom:1px solid #eceef1;">
+      <div style="font-size:15px;font-weight:600;">
+        {{ lead.operator_name or lead.people | join(', ') }}
+      </div>
+      <div style="font-size:13px;color:#5b6470;margin-top:2px;">
+        {{ lead.label }}{% if lead.licence_type %} · {{ lead.licence_type }}{% endif %}{% if lead.licence_number %} · {{ lead.licence_number }}{% endif %}
+      </div>
+      {% if lead.fleet_line %}
+      <div style="font-size:13px;margin-top:4px;">Fleet: {{ lead.fleet_line }}</div>
+      {% endif %}
+      {% if lead.first_centre_place %}
+      <div style="font-size:13px;margin-top:2px;">Operating centre: {{ lead.first_centre_place }}{% if lead.operating_centres | length > 1 %} (+{{ lead.operating_centres | length - 1 }} more){% endif %}</div>
+      {% endif %}
+      {% for line in lead.change_summary %}
+      <div style="font-size:13px;margin-top:2px;color:#1a1d21;">&#8227; {{ line }}</div>
+      {% endfor %}
+      {% if lead.people %}
+      <div style="font-size:13px;margin-top:4px;color:#5b6470;">{{ (lead.people_role or 'named') | capitalize }}: {{ lead.people | join(', ') }}</div>
+      {% endif %}
+      {% if lead.transport_managers %}
+      <div style="font-size:13px;margin-top:2px;color:#5b6470;">Transport manager: {{ lead.transport_managers | join(', ') }}</div>
+      {% endif %}
+      {% for line in lead.considerations %}
+      <div style="font-size:12px;margin-top:2px;color:#8a5a00;">{{ line }}</div>
+      {% endfor %}
+      {% if lead.notes %}
+      <div style="font-size:12px;margin-top:4px;color:#5b6470;">{{ lead.notes | truncate(280) }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div style="background:#ffffff;border-radius:0 0 8px 8px;border:1px solid #e2e5e9;border-top:0;padding:16px 24px;font-size:12px;color:#5b6470;">
+    <p style="margin:0 0 8px;">Source: Traffic Commissioner <em>Applications &amp; Decisions</em> {{ release_no }}, {{ region_name }}, {{ published_on }}. Contains public sector information licensed under the Open Government Licence v3.0. A CSV of all {{ total }} leads is attached.</p>
+    <p style="margin:0;">This data is provided for business-to-business lead generation. Recipients must comply with UK GDPR/PECR when contacting individuals named here.</p>
+  </div>
+
+</div>
+</body>
+</html>

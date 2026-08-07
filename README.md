@@ -15,7 +15,11 @@ House data, and delivers a digest plus CSV filtered by territory and event type.
 
 ## Status
 
-Stage 0 (recon and corpus capture). Not yet a running pipeline.
+Stage 0 (recon, corpus capture, pilot digest). Not yet a running pipeline.
+The pilot digest — East of England release 5599 (5 Aug 2026), 131 leads — renders
+from `data/pilot/records.json`; the extraction reconciles 1:1 against every licence
+number in the source PDF but still needs a human verification pass before it is
+sent to prospects (PLAN.md Stage 0 exit).
 
 ## Quickstart
 
@@ -29,6 +33,8 @@ uv run haulier status                # what has been captured locally
 uv run haulier dump --all            # extract + cache per-page text (idempotent)
 uv run haulier headings --all        # heading frequency table → section_heading_map seed
 uv run haulier licences --all        # licence-number harvest → regex + prefix-map validation
+uv run haulier render-digest         # render digest HTML + CSV from data/pilot/records.json
+uv run haulier render-digest --redact  # public-sample variant, people redacted to initials
 ```
 
 Captured documents land in `data/` and are gitignored — they are public data under the Open
