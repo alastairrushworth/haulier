@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets — never commit (spec §9)
+.env
+.env.*
+!.env.example
+*.pem
+
+# Captured source documents. Public data under OGL v3, but large and
+# reproducible from GOV.UK; the canonical copy belongs in object storage.
+data/
+
+# Model response cache (PLAN.md §1.6). Regenerable; keyed by prompt version
+# and chunk hash. Kept out of git to avoid churn on every prompt edit.
+.cache/
+
+# OS
+.DS_Store
