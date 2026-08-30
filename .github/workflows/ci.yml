@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Format
+        run: uv run ruff format --check src tests
+
+      - name: Types
+        run: uv run mypy src tests
+
+      # `data/` is gitignored, so the tests that read the captured corpus skip
+      # here and the committed synthetic fixture carries the same regressions.
+      # No test in this suite touches the network.
+      - name: Tests
+        run: uv run pytest -q
