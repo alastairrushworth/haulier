@@ -68,7 +68,10 @@
 
   <div style="background:#ffffff;border-radius:0 0 8px 8px;border:1px solid #e2e5e9;border-top:0;padding:16px 24px;font-size:12px;color:#5b6470;">
     <p style="margin:0 0 8px;">Source: Traffic Commissioner <em>Applications &amp; Decisions</em> {{ release_no }}, {{ region_name }}, {{ published_on }}. Contains public sector information licensed under the Open Government Licence v3.0. A CSV of all {{ total }} leads is attached.</p>
-    <p style="margin:0;">This data is provided for business-to-business lead generation. Recipients must comply with UK GDPR/PECR when contacting individuals named here.</p>
+    <p style="margin:0 0 8px;">This data is provided for business-to-business lead generation. Recipients must comply with UK GDPR and PECR when contacting individuals named here. PECR treats sole traders and partnerships differently from corporate subscribers, so the CSV's <strong>is_sole_trader_or_partnership</strong> column marks them — route those to phone or post rather than cold email. We are not your lawyer.</p>
+    <p style="margin:0;">We process this personal data under legitimate interests, from public registers.
+      {%- if privacy_notice_url %} Our <a href="{{ privacy_notice_url }}" style="color:#0b3d62;">privacy notice</a> explains the sources, purposes and retention.{% else %} Our privacy notice is available on request.{% endif %}
+      Anyone named here can object to being included, and be suppressed from future digests, by writing to <a href="mailto:{{ objection_email }}" style="color:#0b3d62;">{{ objection_email }}</a>.</p>
   </div>
 
 </div>

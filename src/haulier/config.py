@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 60.0
     http_retries: int = 3
 
+    objection_email: str = ""
+    """Where a data subject asks to be removed (PLAN §2.11, spec §8.3).
+
+    Defaults to `contact_email` so the route works from the first send rather
+    than waiting on the static site."""
+
+    privacy_notice_url: str = ""
+    """Published privacy notice. Empty until it exists — the footer says so in
+    prose rather than linking somewhere that 404s in a prospect's inbox."""
+
+    @property
+    def objection_route(self) -> str:
+        return self.objection_email or self.contact_email
+
     @property
     def user_agent(self) -> str:
         return f"FirstMover/0.1 (+HGV licence lead research; contact: {self.contact_email})"
