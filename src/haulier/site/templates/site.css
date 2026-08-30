@@ -1,0 +1,98 @@
+/* Plain CSS, no framework and no build step (spec §4.8). Palette matches the
+   digest template so the sample does not look like a different product. */
+:root {
+  --navy: #0b3d62;
+  --ink: #1a1d21;
+  --muted: #5b6470;
+  --line: #e2e5e9;
+  --ground: #f4f5f7;
+  --card: #ffffff;
+  --warn: #8a5a00;
+  --warn-bg: #fff6e5;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--ground);
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+a { color: var(--navy); }
+
+.dry-run {
+  background: var(--warn-bg);
+  border-bottom: 2px solid var(--warn);
+  color: var(--warn);
+  font-size: 14px;
+  padding: 10px 0;
+}
+.dry-run strong { text-transform: uppercase; letter-spacing: 0.06em; }
+.dry-run ul { margin: 6px 0 0; padding-left: 20px; }
+
+header.masthead { background: var(--navy); color: #fff; padding: 14px 0; }
+header.masthead .wrap { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+header.masthead .brand { font-weight: 700; font-size: 18px; }
+header.masthead nav { margin-left: auto; display: flex; gap: 16px; font-size: 14px; }
+header.masthead nav a { color: #fff; opacity: 0.85; text-decoration: none; }
+header.masthead nav a:hover { opacity: 1; text-decoration: underline; }
+
+.hero { background: var(--navy); color: #fff; padding: 40px 0 48px; }
+.hero h1 { font-size: 30px; line-height: 1.25; margin: 0 0 14px; }
+.hero p { font-size: 18px; margin: 0 0 10px; opacity: 0.92; }
+.hero .cta { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-block; padding: 12px 20px; border-radius: 6px;
+  font-weight: 600; text-decoration: none; font-size: 15px;
+}
+.btn-primary { background: #fff; color: var(--navy); }
+.btn-ghost { border: 1px solid rgba(255,255,255,0.5); color: #fff; }
+.btn-stub { position: relative; }
+.btn-stub::after {
+  content: "stub"; position: absolute; top: -8px; right: -8px;
+  background: var(--warn); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em;
+}
+
+main section { padding: 36px 0; border-bottom: 1px solid var(--line); }
+main section:last-child { border-bottom: 0; }
+h2 { font-size: 21px; color: var(--navy); margin: 0 0 16px; }
+h3 { font-size: 16px; margin: 22px 0 6px; }
+
+.steps { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.step .n { color: var(--navy); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.scroll { overflow-x: auto; }
+
+.prices { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .prices { grid-template-columns: 1fr 1fr; } }
+.price { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+.price .amount { font-size: 30px; font-weight: 700; color: var(--navy); }
+.price .amount span { font-size: 15px; font-weight: 400; color: var(--muted); }
+.price ul { padding-left: 18px; margin: 12px 0 18px; font-size: 14px; }
+.price.founding { border-color: var(--navy); border-width: 2px; }
+.badge {
+  display: inline-block; background: var(--navy); color: #fff; font-size: 11px;
+  font-weight: 700; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 3px;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+
+details { background: var(--card); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; }
+summary { padding: 12px 16px; cursor: pointer; font-weight: 600; font-size: 15px; }
+details p { padding: 0 16px 14px; margin: 0; font-size: 15px; }
+
+.legal { background: var(--card); }
+.legal h2 { margin-top: 28px; }
+.legal p, .legal li { font-size: 15px; }
+.updated { color: var(--muted); font-size: 14px; }
+
+footer { background: var(--navy); color: #fff; padding: 28px 0; font-size: 14px; }
+footer a { color: #fff; }
+footer p { margin: 0 0 8px; opacity: 0.9; }

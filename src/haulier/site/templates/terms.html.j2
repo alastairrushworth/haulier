@@ -1,0 +1,58 @@
+{% extends "base.html.j2" %}
+{% block title %}Terms — {{ product }}{% endblock %}
+{% block description %}Subscription terms for {{ product }}.{% endblock %}
+
+{% block body %}
+<main class="legal">
+  <div class="wrap">
+    <h1>Subscription terms</h1>
+    <p class="updated">Last updated {{ today }}.</p>
+
+    <h2>What you are buying</h2>
+    <p>A subscription to a weekly email digest and CSV of operator-licence events for the
+      territories you select, for your own internal business use.</p>
+
+    <h2>What you may do with it</h2>
+    <p>Use it to find and contact prospects, load it into your own CRM, and share it inside your
+      own organisation.</p>
+
+    <h2>What you may not do</h2>
+    <p>Resell it, redistribute it, publish it, or use it to build or train a competing product or
+      dataset. One subscription covers one organisation.</p>
+
+    <h2>Accuracy</h2>
+    <p>We derive this from public records and check it as described on the
+      <a href="/">home page</a>, but it is provided <strong>as is</strong>. Verify anything you are
+      about to spend money on. We are not liable for decisions you take on the basis of it, and our
+      total liability is capped at what you paid us in the previous twelve months.</p>
+
+    <h2>Your obligations when contacting people</h2>
+    <p>You are the data controller for your own outreach. UK GDPR and PECR apply, and they treat
+      sole traders and partnerships differently from corporate subscribers — we mark those in every
+      CSV so you can route them appropriately. We are not your lawyers and this is not legal advice.</p>
+
+    <h2>Billing and cancellation</h2>
+    <p>Monthly in advance by card through Stripe, or annually at {{ pricing.annual_months }}× the
+      monthly rate. Cancel any time through the billing portal; you keep access to the end of the
+      period you have paid for. Founding rates are locked for {{ pricing.founding_months }} months
+      from signup and then move to list price, and we will tell you before that happens.</p>
+
+    <h2>If we get something wrong</h2>
+    <p>If we ship materially wrong data we will correct it in the next digest and tell everyone
+      affected. If we cannot deliver for a sustained period we will refund the affected period.</p>
+
+    <h2>Ending it</h2>
+    <p>Either of us can end the subscription at any time. If we end it without cause we refund the
+      unused portion.</p>
+
+    <h2>Law</h2>
+    <p>{{ legal.jurisdiction }}</p>
+
+    {%- if dry_run %}
+    <hr>
+    <p class="updated"><strong>Draft.</strong> Not reviewed by a solicitor. Have it checked before
+      taking money.</p>
+    {%- endif %}
+  </div>
+</main>
+{% endblock %}
