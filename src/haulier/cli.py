@@ -361,6 +361,53 @@ def render_digest(
 
 
 @app.command()
+def build_site(
+    out_dir: Path = typer.Option(Path("site/dist"), help="Where to write the built site."),
+    sample: Path = typer.Option(None, help="Sample digest HTML (default: the redacted pilot)."),
+    serve: bool = typer.Option(False, "--serve", help="Serve the build locally and block."),
+    port: int = typer.Option(8000, help="Port for --serve."),
+) -> None:
+    """Build the static landing site (spec §4.8) — plain HTML, no framework.
+
+    Every service that would cost money or need an account is a placeholder.
+    While any are unresolved the build is a dry run: it carries a banner naming
+    what is missing, marks each stub link, and sets noindex.
+    """
+    from .site.build import build_site as run_build
+
+    result = run_build(out_dir, sample=sample)
+    console.print(f"{len(result.pages)} pages → [bold]{result.out_dir}[/]")
+    if result.sample_source:
+        console.print(f"  sample issue ← {result.sample_source}")
+    else:
+        console.print(
+            "  [yellow]no sample digest found[/] — run "
+            "[bold]haulier render-digest --redact[/] first"
+        )
+    if result.unresolved:
+        console.print(f"[bold yellow]Dry run — {len(result.unresolved)} placeholder(s):[/]")
+        for item in result.unresolved:
+            console.print(f"  {item.env}  — {item.note}")
+    else:
+        console.print("[bold green]All placeholders resolved — this build is live-ready.[/]")
+
+    if serve:
+        import functools
+        import http.server
+        import socketserver
+
+        handler = functools.partial(
+            http.server.SimpleHTTPRequestHandler, directory=str(result.out_dir)
+        )
+        with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
+            console.print(f"\nServing on [bold]http://127.0.0.1:{port}/[/] — ctrl-c to stop")
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                console.print("\nstopped")
+
+
+@app.command()
 def probe(path: Path = typer.Argument(..., help="Path to a PDF.")) -> None:
     """Probe a single PDF for page count and text-layer presence."""
     result = probe_pdf(path)

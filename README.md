@@ -12,6 +12,8 @@ House data, and delivers a digest plus CSV filtered by territory and event type.
 
 - **`spec.md`** — the product and system specification.
 - **`PLAN.md`** — build plan, verified Phase 0 findings, and corrections to the spec.
+- **`INFRA.md`** — the Cloudflare architecture and what it costs to run (~$9.56/month).
+- **`PROGRESS.md`** — working log between sessions.
 
 ## Status
 
@@ -38,6 +40,7 @@ uv run haulier headings --all        # heading frequency table → section_headi
 uv run haulier licences --all        # licence-number harvest → regex + prefix-map validation
 uv run haulier render-digest         # render digest HTML + CSV from data/pilot/records.json
 uv run haulier render-digest --redact  # public-sample variant, people redacted to initials
+uv run haulier build-site --serve    # build the landing site and serve it locally
 ```
 
 `capture` exits non-zero if anything needs a human: an unparsed title (format drift), a
