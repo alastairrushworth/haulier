@@ -81,7 +81,8 @@ def _manifest_rows(area: TrafficArea) -> list[dict[str, Any]]:
     path = manifest_path(area)
     if not path.exists():
         return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    rows: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+    return rows
 
 
 def stale_jobs(area: TrafficArea) -> list[tuple[str, str, dict[str, Any]]]:
