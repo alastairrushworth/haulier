@@ -67,20 +67,22 @@ Release numbers are **per-region sequential** (NW at 7167, Scotland at 2481), wh
 
 ### 1.5 Measured: volume per traffic area, prefix map, and the real section taxonomy
 
-Measured directly by downloading the four most recent releases from each of the eight regions (32 PDFs) and counting.
+Measured directly by downloading the four most recent releases from each of the eight regions (32 PDFs) and counting. **Superseded by the full-2026-corpus measurement** once Stage 0 item 2 completed — the four-release sample ran high everywhere, but the ranking did not move, so no decision built on it changes.
 
 **Distinct licence numbers per release** — the reliable proxy for lead volume:
 
-| Traffic area | Licences/release | Mean pages | Prefix |
-|---|---:|---:|---|
-| **East of England** | **167.2** | 32.1 | `OF` |
-| North East | 112.0 | 26.0 | `OB` |
-| West of England | 94.5 | 24.0 | `OH` |
-| West Midlands | 89.5 | 24.9 | `OD` |
-| North West | 88.0 | 23.1 | `OC` |
-| London & South East | 81.5 | 21.3 | `OK` |
-| Scotland | 48.2 | 16.0 | `OM` |
-| Wales | 32.2 | 15.4 | `OG` |
+| Traffic area | 32-PDF sample | Full 2026 corpus | Home-prefix share | Prefix |
+|---|---:|---:|---:|---|
+| **East of England** | 167.2 | **156.0** | 99.94% | `OF` |
+| North East | 112.0 | 105.6 | 99.86% | `OB` |
+| West of England | 94.5 | 99.7 | 99.81% | `OH` |
+| West Midlands | 89.5 | 90.5 | 99.95% | `OD` |
+| North West | 88.0 | 89.7 | 99.89% | `OC` |
+| London & South East | 81.5 | 80.1 | 99.82% | `OK` |
+| Scotland | 48.2 | 43.2 | 99.78% | `OM` |
+| Wales | 32.2 | 36.2 | 99.62% | `OG` |
+
+The full-corpus column is 270 releases (~34 per region) as at 30 Aug 2026 and moves a little each week as new releases land. `data/recon/licences.json` is the source of truth — regenerate with `haulier licences --all` rather than trusting this table to be current. Quote these numbers, not the 32-PDF sample.
 
 **§14 Q2 answered — `licence_prefix_map` seeded empirically.** All eight prefixes are `O` + a region letter, exactly as tabulated above; cross-region contamination in the sample was 3 occurrences out of ~2,900 (incidental cross-references). The spec's `^[OP][A-Z][0-9]{6,7}$` regex holds. No `P`-prefixed (PSV) numbers appeared in any goods document, which also answers §14 Q3: **there are no combined goods+PSV documents** in this corpus.
 
@@ -265,6 +267,15 @@ Two consequences worth naming:
 - **Onboarding gap:** a subscriber who pays on day 2 of their region's week waits until day 8 for anything. Send the most recent already-published digest for their regions immediately on `checkout.completed`. One query, large churn effect.
 - **Phase 0 is not "no product code."** Resolving URLs, pulling releases, cataloguing headings, and building a golden set all require a fetcher and a text extractor. Write them as real code (§3, Stage 0) — they become the watcher and fetcher rather than being thrown away.
 
+### 2.14 Two columns missing from the §4.4 CSV contract
+
+§4.4 fixes the CSV columns as "a stable API — additive changes only", but its own list omits two fields the rest of the spec relies on. Both are appended now, while the contract is still cheap to change and no subscriber has seen it.
+
+- **`is_sole_trader_or_partnership`** — §4.2 lists it as a derived field and §8.4 asks for it "prominently in the CSV so customers can route those to phone/post rather than cold email". It is PECR-load-bearing: the whole point is that a subscriber must treat these leads differently. Derived three-state from `people_role` (the source names *directors* for a company and *partners* for a partnership), falling back to the operator name — a bare personal name is a sole trader, a legal-form or public-body token is not. Anything else stays **empty rather than guessed**, because an empty cell tells the subscriber to check while a wrong `no` invites them to cold-email an individual. On East of England 5599 that is 11 flagged, 113 corporate, 7 unknown — the unknowns being transport-manager public inquiries with no operator at all.
+- **`operating_centre_postcodes`** — §2.12 promotes operating-centre postcode to a first-class field because radius filtering depends on it, but the CSV only had the `operating_centres` address blob, which cannot be filtered on. Pipe-separated, de-duplicated, in centre order.
+
+A useful side effect: the transport-manager public inquiries that appear in a region's publication but are *held* elsewhere (Leeds, Warrington, Edinburgh, Belfast in 5599 alone) now carry an empty postcode column. Region filtering still includes them — they were published in that region, which is a fact — and radius filtering will naturally exclude them, which is the correct answer for a lead with no location in anyone's patch.
+
 ---
 
 ## 3. Build sequence
@@ -285,7 +296,7 @@ Then, by hand plus Claude: take one busy region's latest release, extract every 
 
 In parallel: register the Companies House API key, read the VOL terms, confirm the data.gov.uk register dataset's freshness/columns/licence, publish the privacy notice and objection inbox.
 
-**Exit:** pilot digest sent to 15–20 targets at £49/mo; ≥3 verbal yeses. Kill criterion evaluated honestly. All of §14 Q1–Q9 answered in writing.
+**Exit:** pilot digest sent to 15–20 targets at the **£49/mo founding rate** (§4, decision 6 — a named, time-limited price, not the list price); ≥3 verbal yeses. Kill criterion evaluated honestly. All of §14 Q1–Q9 answered in writing.
 
 ### Stage 1 — Skeleton, data model, golden-set harness (week 1)
 
@@ -360,13 +371,17 @@ Every stage is a CLI subcommand and a cron entry. No queue, no workers, no orche
 ## 4. Decisions taken
 
 1. **Ramp: all 8 regions live from day one, sampled QA.** The 100%-review gate in spec §5.3[9] is removed; the 24h SLO stands. Safety comes from calibrating the sampler against the Stage 0 backfill before launch, plus stratified sampling, a risk-ranked queue, and a guard-rate circuit breaker (§2.6).
-2. **Territory: support both region and postcode-radius filtering**, region as the default (§2.12). Operating-centre postcode is promoted to a gated extraction field. Pricing tiers stay at £79/£149 for now and are revisited in Phase 2 once 20 sales conversations have happened — the schema supports either shape.
+2. **Territory: support both region and postcode-radius filtering**, region as the default (§2.12). Operating-centre postcode is promoted to a gated extraction field. List prices stay at £79/£149 for now and are revisited in Phase 2 once 20 sales conversations have happened — the schema supports either shape. The £49 pitched at Stage 0 is the founding rate, not a third tier (decision 6).
 3. **Backfill: capture all 2026 releases from the live pages during Stage 0** — ~250 PDFs. Doubles as the calibration corpus, the heading-map seed, and 8 months of `first_seen_date` history. National Archives backfill for 2024–25 stays in Phase 3.
 4. **Production extraction backend: decided at Stage 4.** Build and test run locally on the Max subscription with a fixture cache for CI (§1.5); no API key exists before then.
 
-5. **Lead region: East of England** (`OF`). Measured at 167 distinct licences per release — 1.5× the next region, 2× the median, 5× Wales (§1.5). The traffic area covers Leicestershire, Northamptonshire, Lincolnshire, Bedfordshire, Buckinghamshire, Cambridgeshire, Hertfordshire, Essex, Norfolk and Suffolk, plus Leicester, Luton, Milton Keynes, Peterborough, Rutland, Southend-on-Sea and Thurrock — i.e. the Midlands "golden triangle" logistics corridor, the Thames Gateway, and the Felixstowe hinterland. Both the volume and the geography point the same way. Pilot digest, golden set, and first sales conversations all start here.
+5. **Lead region: East of England** (`OF`). Measured over the full 2026 corpus at **~156 distinct licences per release** — 1.5× the next region, 1.7× the median, 4× Wales (§1.5). The traffic area covers Leicestershire, Northamptonshire, Lincolnshire, Bedfordshire, Buckinghamshire, Cambridgeshire, Hertfordshire, Essex, Norfolk and Suffolk, plus Leicester, Luton, Milton Keynes, Peterborough, Rutland, Southend-on-Sea and Thurrock — i.e. the Midlands "golden triangle" logistics corridor, the Thames Gateway, and the Felixstowe hinterland. Both the volume and the geography point the same way. Pilot digest, golden set, and first sales conversations all start here.
 
    Tradeoff accepted: East of England is also the heaviest QA load per release. That is the right way round — prove the accuracy gates on the hardest region and every other region is easier.
+
+6. **£49 is the founding rate, £79 is the list price.** Stage 0 pitches £49/mo to the first cohort — spec §2.5's kill criterion, §11 Phase 0 and §14 Q8 all already read it that way ("founding price acceptance at £49 → confidence in £79/£149 list"). PLAN §3's exit criterion said only "£49/mo", which reads as the price, so it is now named explicitly. Terms: **the first 10 subscribers, locked for 12 months**, in exchange for testimonials and feedback calls (spec §1); after that, and for everyone else, the list price applies.
+
+   One number to reconcile before Stripe is configured: spec §4.6 defines `founding_*` as **50% off**, which is £39.50 against a £79 list, not £49. £49 is 62% of list. Either the founding products are priced at £49 flat (and §4.6's "50%" is prose to fix) or they are £39.50 (and every "£49" in the spec is wrong). **Decision: £49 flat**, because it is the number in the kill criterion and the one the pitch will actually quote. §4.6's `founding_*` should read "≈62% of list, priced at £49 / £99" rather than "50%".
 
 ### Still open
 

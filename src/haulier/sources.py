@@ -55,9 +55,10 @@ TRAFFIC_AREAS: tuple[TrafficArea, ...] = (
 BY_SLUG: dict[str, TrafficArea] = {a.slug: a for a in TRAFFIC_AREAS}
 BY_PREFIX: dict[str, TrafficArea] = {a.licence_prefix: a for a in TRAFFIC_AREAS}
 
-#: Lead region for Phase 0 (PLAN.md §4, decision 5). Measured at 167 distinct
-#: licences per release — 1.5x the next area — and covers the Midlands
-#: "golden triangle" logistics corridor.
+#: Lead region for Phase 0 (PLAN.md §4, decision 5). Measured over the full
+#: 2026 corpus at ~156 distinct licences per release — 1.5x the next area —
+#: and spanning the Midlands "golden triangle" logistics corridor, the Thames
+#: Gateway and the Felixstowe hinterland.
 LEAD_AREA = BY_SLUG["the-east-of-england"]
 
 
