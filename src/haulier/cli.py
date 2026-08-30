@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -98,6 +99,9 @@ def capture(
     all_regions: bool = typer.Option(False, "--all", help="Capture all eight areas."),
     limit: int = typer.Option(None, help="Most recent N releases per area (default: all)."),
     no_probe: bool = typer.Option(False, "--no-probe", help="Skip the text-layer probe."),
+    refresh: bool = typer.Option(
+        False, "--refresh", help="Re-download everything and compare digests."
+    ),
 ) -> None:
     """Download A&D releases, fingerprint them, and probe for a text layer.
 
@@ -107,28 +111,53 @@ def capture(
     """
     targets = _areas(region, all_regions)
     grand_total = 0
+    alarms = 0
     with GovUkClient() as client:
         for area in targets:
             console.print(f"[bold]{area.name}[/] ({area.licence_prefix}) …")
-            captured = capture_area(area, client, limit=limit, probe=not no_probe)
+            result = capture_area(area, client, limit=limit, probe=not no_probe, refresh=refresh)
+            captured = result.releases
             grand_total += len(captured)
 
             no_text = [c for c in captured if c.has_text_layer is False]
             unparsed = [c for c in captured if not c.parsed_title]
+            probe_failed = [c for c in captured if c.probe_error]
+            superseded = [c for c in captured if c.superseded_sha256]
             pages = sum(c.page_count or 0 for c in captured)
             size_mb = sum(c.byte_size for c in captured) / 1e6
             console.print(
                 f"  {len(captured)} releases, {pages} pages, {size_mb:.1f} MB "
                 f"→ {manifest_path(area)}"
             )
+            if superseded:
+                alarms += len(superseded)
+                console.print(
+                    f"  [bold yellow]{len(superseded)} release(s) re-issued at source[/] "
+                    "— corrections may be owed (spec §7): "
+                    + ", ".join(c.release_no or "?" for c in superseded)
+                )
             if no_text:
+                alarms += len(no_text)
                 console.print(
                     f"  [bold red]{len(no_text)} without a text layer[/] "
                     "— OCR fallback required (spec §5.3[2])"
                 )
+            if probe_failed:
+                alarms += len(probe_failed)
+                console.print(f"  [bold red]{len(probe_failed)} unreadable PDF(s)[/]")
+                for row in probe_failed:
+                    console.print(f"    {row.release_no or '?'}: {row.probe_error}")
             if unparsed:
+                alarms += len(unparsed)
                 console.print(f"  [bold red]{len(unparsed)} unparsed title(s)[/]")
+            if result.failures:
+                alarms += len(result.failures)
+                console.print(f"  [bold red]{len(result.failures)} fetch failure(s)[/]")
+                for title, error in result.failures:
+                    console.print(f"    {title}: {error}")
     console.print(f"[bold green]Captured {grand_total} releases.[/]")
+    if alarms:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -181,7 +210,7 @@ def _ensure_dumps(areas: list[sources.TrafficArea], workers: int | None) -> None
             console.print(f"  {done}/{len(jobs)}")
 
 
-def _write_recon(name: str, payload: dict) -> Path:
+def _write_recon(name: str, payload: dict[str, Any]) -> Path:
     path = settings().data_dir / "recon" / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -210,7 +239,7 @@ def headings(
     targets = _areas(region, all_regions)
     _ensure_dumps(targets, workers)
 
-    combined: dict[str, dict] = {}
+    combined: dict[str, dict[str, Any]] = {}
     for area in targets:
         stats = recon.analyse_headings(list(textdump.iter_dumps(area)))
         combined[area.slug] = recon.headings_payload(stats)
@@ -265,8 +294,8 @@ def licences(
     table.add_column("Home prefix %", justify="right")
     table.add_column("Foreign", justify="right")
 
-    combined: dict[str, dict] = {}
-    all_near_misses: dict[str, dict] = {}
+    combined: dict[str, dict[str, Any]] = {}
+    all_near_misses: dict[str, dict[str, Any]] = {}
     for area in targets:
         stats = recon.analyse_licences(list(textdump.iter_dumps(area)))
         payload = recon.licences_payload(stats, area)
@@ -307,9 +336,7 @@ def licences(
 
 @app.command()
 def render_digest(
-    records: Path = typer.Option(
-        Path("data/pilot/records.json"), help="Extracted records JSON."
-    ),
+    records: Path = typer.Option(Path("data/pilot/records.json"), help="Extracted records JSON."),
     out_dir: Path = typer.Option(Path("data/pilot"), help="Where to write digest.html/.csv."),
     redact: bool = typer.Option(
         False, help="Redact people to initials — required for the public sample (PLAN §2.11)."
