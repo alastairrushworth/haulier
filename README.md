@@ -19,7 +19,8 @@ House data, and delivers a digest plus CSV filtered by territory and event type.
 
 Stage 0 (recon, corpus capture, pilot digest). Not yet a running pipeline.
 
-The full 2026 corpus is captured — **270 releases across all eight regions**. The
+The full 2026 corpus is captured — **275 releases across all eight regions** as at
+1 Sep 2026, and it grows by ~8 a week; `haulier status` is the current figure. The
 pilot digest (East of England release 5599, 5 Aug 2026, 131 leads) renders from
 `data/pilot/records.json`; the extraction reconciles 1:1 against every licence
 number in the source PDF but still needs a human verification pass before it is

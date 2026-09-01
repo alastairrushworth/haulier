@@ -1,7 +1,8 @@
 # Progress — FirstMover
 
 Working log for picking up between sessions. Companion to `PLAN.md` (build plan)
-and `spec.md` (product spec). Last updated: **30 Aug 2026**.
+and `spec.md` (product spec), plus `INFRA.md` (what it costs to run).
+Last updated: **1 Sep 2026**.
 
 ## Where we are
 
@@ -13,8 +14,10 @@ now founder work.**
 ### Recon toolkit (committed `f31e0ed`)
 - `haulier` CLI: `areas` / `releases` / `capture` / `status` / `probe` over the
   GOV.UK Content API. Capture is idempotent, fingerprints SHA-256, probes text layer.
-- Full 2026 corpus captured: **270 goods releases, all 8 regions**, refreshed
-  30 Aug so every release live on the pages is on disk. (~90 MB in `data/`, gitignored.)
+- Full 2026 corpus captured: **275 goods releases, all 8 regions** as at 1 Sep.
+  That number moves every week — five landed in the two days after the 30 Aug
+  capture — so trust `haulier status` over this line, and run
+  `haulier capture --all` before quoting a figure anywhere.
 
 ### Corpus analysis (committed `dbe732d`)
 - `haulier dump` — cached per-page text extraction (line + font size + bold),
@@ -108,8 +111,8 @@ the first send), the legitimate-interests basis, a privacy-notice link when
 `HAULIER_PRIVACY_NOTICE_URL` is set and honest prose when it isn't, and the
 PECR note pointing subscribers at the sole-trader column.
 
-**Infrastructure** — `tests/` now exists (was `testpaths = ["tests"]` pointing
-at nothing; `pytest` exited 5). 79 tests, none touching the network. mypy
+**Tooling and CI** — `tests/` now exists (was `testpaths = ["tests"]` pointing
+at nothing; `pytest` exited 5). 87 tests, none touching the network. mypy
 `strict` is green on `src` **and** `tests` for the first time — fixing it
 surfaced that `capture_area` was welded to the concrete `GovUkClient`, now a
 `ReleaseSource` protocol. `ruff format` adopted with `# fmt: off` guards around
@@ -121,6 +124,49 @@ same regressions are pinned against `tests/fixtures/release_sample.json`, a
 synthetic release with invented names carrying every awkward shape in the real
 corpus (the double-variation collision, a TM inquiry naming someone in `notes`,
 a sole trader, a partnership, a council, an ambiguous trade name).
+
+### Infrastructure decided and priced (1 Sep 2026) — `INFRA.md`
+
+The backend runs on **Cloudflare**, costed at **$9.56/month** all-in against a
+$10 target. Workers Paid ($5) is the only fixed cost; R2, D1, Cron Triggers,
+Static Assets and Email Routing are all inside free tiers at this scale.
+Recorded as PLAN §4 decisions 7–10. Four things a future session should not
+have to rediscover:
+
+1. **Python Workers cannot run pdfplumber** — they are Pyodide, so pure-Python
+   and PyEmscripten wheels only, and pdfminer.six pulls in `cryptography` (Rust)
+   plus `pypdfium2` (C). This is a packaging boundary, not a config problem.
+   **Do not spend time trying to work around it.** The pipeline splits at the
+   existing `data/text/` cache instead: PDF→text in a Container, everything
+   downstream on Workers unmodified. Measured at 0.79 s/release, that container
+   step uses 0.13% of the 375 vCPU-minutes the $5 plan already includes.
+2. **D1 replaces Postgres for V1**, overriding spec §5.2 and PLAN §2.13. A
+   managed Postgres at ~£20/mo is twice the whole budget. Cost: no PostGIS, so
+   §2.12's radius filter becomes a bounding-box prefilter plus a haversine check
+   in the Worker — fine at 80 subscribers, not at 10,000.
+3. **Resend, not Postmark**, whose cheapest paid plan is $15/mo. §2.13's rule is
+   untouched: the Phase 0 pitch emails still go by hand from a normal mailbox.
+4. **Extraction model costed but still undecided** (decision 4 stands). Output
+   tokens dominate, so prompt caching saves ~$0.20/mo and model choice is the
+   lever. Batch is right for the one-off backfill (~$14.31) and wrong for the
+   weekly cycle, because its 24-hour window eats the whole §7 SLO.
+
+### Landing site built (1 Sep 2026)
+
+`haulier build-site [--serve]` renders the spec §4.8 site — landing page,
+privacy notice, terms, and the redacted 5599 sample — as plain HTML with no
+framework. Output is gitignored; rebuild it rather than reading `site/dist/`.
+
+Every service that would cost money is a placeholder, and **the dry-run state is
+deliberately loud**: while any placeholder is unresolved the build carries a
+banner naming the missing env vars, badges each stub link, and sets `noindex`.
+Set the three `HAULIER_CHECKOUT_*_URL` vars and it clears itself — there is no
+separate production flag to forget to flip.
+
+The privacy notice is a real draft, not filler: Article 14 basis (we did not get
+the data from the subject), both sources named, legitimate interests, and a
+working objection route. **It still needs a solicitor**, and the page says so
+while `dry_run` is true. This discharges most of PLAN §2.11's Stage 0 blocker.
 
 ### Findings that changed the plan (see also PLAN.md §1–2)
 1. **Title format drifted live on 5 Aug**: `AD_6720` (underscore) alongside
@@ -153,9 +199,11 @@ a sole trader, a partnership, a council, an ambiguous trade name).
       weeks old. 5602's PDF is captured; it needs the extraction pass.
 - [ ] Companies House API key; read VOL terms; confirm data.gov.uk bulk register
       dataset (freshness/columns/licence).
-- [ ] Publish the privacy notice on a static URL and set
-      `HAULIER_PRIVACY_NOTICE_URL`; confirm the objection inbox is monitored.
-      The footer already links a working route (PLAN §2.11).
+- [ ] **Get the privacy notice and terms reviewed**, then deploy the site and set
+      `HAULIER_PRIVACY_NOTICE_URL`. Both are drafted (`haulier build-site`) and
+      describe what the system actually does; neither has seen a solicitor.
+      Confirm the objection inbox is monitored — the digest footer already
+      links a working route (PLAN §2.11).
 - [ ] Send pilot digest to 15–20 targets at the **£49/mo founding rate** — first
       10 subscribers, locked 12 months — by hand from a normal mailbox (NOT
       Postmark, PLAN §2.13). **Exit: ≥3 verbal yeses.**
@@ -168,12 +216,17 @@ a sole trader, a partnership, a council, an ambiguous trade name).
 - [ ] **Stage 1**: repo hardening (Docker Compose, Alembic, SQLAlchemy models with
       PLAN §2.1–2.3 schema fixes), then the **golden-set harness before the
       extractor** — seed fixtures from the verified 131 pilot records plus
-      stratified draws from the 270-release backfill. Backend interface +
+      stratified draws from the ~275-release backfill. Backend interface +
       fixture cache per PLAN §1.6. `tests/` and CI exist now, so the harness
       has somewhere to land.
 - [ ] Keep `haulier capture --all` running weekly (releases drop off the live
       pages on 1 Jan; capture is cheap, idempotent, and now exits non-zero when
-      something needs looking at, so it can go straight into cron).
+      something needs looking at, so it can go straight into cron). It was 5
+      releases behind after just two days, so this is the first thing to run
+      when picking the project back up.
+- [ ] **Stand up the Cloudflare account** when Stage 1 starts — Workers Paid,
+      R2 bucket, D1 database, one Container, two Cron Triggers, Email Routing.
+      Order and rationale in `INFRA.md`.
 
 ### Standing risks / watch items
 - Weekly title-format drift is real (seen once already) — `releases` prints a

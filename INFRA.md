@@ -3,6 +3,11 @@
 Target: **under $10/month** all-in at launch. Costed 30 Aug 2026 against published
 rates and measured against this repo's actual corpus, not estimated from feel.
 
+The choices here are recorded as **PLAN.md §4 decisions 7–10**, and three of them
+override the spec: D1 replaces Postgres (spec §5.2), Resend replaces Postmark
+(spec §5.2), and PLAN §2.13's managed-Postgres bullet is superseded. Read the
+decisions for the reasoning; this file is the costing behind them.
+
 ## The bill
 
 | Service | What it does | $/month |
@@ -25,9 +30,10 @@ That is $0.44 of headroom, and the two numbers that can move are the domain
 (a `.co.uk` is cheaper than a `.com`) and the model. Everything else is either
 a fixed $5 or comfortably inside a free tier.
 
-**One-off:** extracting the 270-release 2026 backfill for Stage 3 calibration —
-$28.62 on Haiku 4.5 standard, or **$14.31 via the Batch API**, which is the right
-tool for it because nobody is waiting on the result.
+**One-off:** extracting the 2026 backfill for Stage 3 calibration — $28.62 on
+Haiku 4.5 standard, or **$14.31 via the Batch API**, which is the right tool for
+it because nobody is waiting on the result. Costed at 270 releases; the corpus
+grows ~8 a week, so scale it by whatever `haulier status` reports on the day.
 
 ## The constraint that shapes the architecture
 
