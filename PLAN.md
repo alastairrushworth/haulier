@@ -252,7 +252,9 @@ CREATE TABLE postcodes (            -- ONS Postcode Directory, OGL v3
   lat double precision, lon double precision, region text);
 ```
 
-A lead matches if **either** its traffic area is in `regions` **or** any of its operating centres falls inside any `radius_filters` entry. Requires the [ONS Postcode Directory](https://geoportal.statistics.gov.uk/) (free, OGL v3, ~2.6M rows — a static load, refreshed a couple of times a year) plus `earthdistance`/PostGIS for the distance query.
+A lead matches if **either** its traffic area is in `regions` **or** any of its operating centres falls inside any `radius_filters` entry. Requires the [ONS Postcode Directory](https://geoportal.statistics.gov.uk/) (free, OGL v3, ~2.6M rows — a static load, refreshed a couple of times a year).
+
+**Amended by §4 decision 7:** the distance query was specified as `earthdistance`/PostGIS, and D1 has neither. It becomes a bounding-box prefilter in SQL (cheap, indexed on lat/lon) plus a haversine check in the Worker. At 2.6M postcodes and ~80 subscribers that is fine; at 10,000 subscribers it would not be, and that is the point to revisit the database.
 
 Two consequences worth naming:
 
@@ -263,7 +265,7 @@ Two consequences worth naming:
 
 - **Stripe Tax / VAT:** at the target £5–8k MRR the business is well under the £90k UK VAT registration threshold. Don't register, don't enable Stripe Tax, revisit at £70k ARR. Removes a whole category of billing complexity from Phase 2.
 - **Phase 0 pitch emails must not go via Postmark.** Twenty cold emails from a brand-new sending domain is the fastest route to a poor sender reputation, and it would poison the deliverability of the actual product later. Send them by hand from a normal mailbox. Postmark comes online in Stage 4 for internal digests, with SPF/DKIM/DMARC configured and a two-week warm-up before the first paying send.
-- **Managed Postgres, not self-hosted.** §9 mandates nightly backups plus a *weekly scripted restore test*. On a side project that chore gets skipped by month two. Neon or Fly Postgres with PITR makes the guarantee real for ~£20/month and deletes a runbook.
+- ~~**Managed Postgres, not self-hosted.**~~ **Superseded by §4 decision 7 — see INFRA.md.** The reasoning still holds (§9 mandates nightly backups plus a *weekly scripted restore test*, and on a side project that chore gets skipped by month two), but the conclusion does not: D1 has point-in-time recovery on the plan we are already paying for, which deletes the same runbook for £0 rather than ~£20/month. That £20 would have been twice the entire infrastructure budget.
 - **Onboarding gap:** a subscriber who pays on day 2 of their region's week waits until day 8 for anything. Send the most recent already-published digest for their regions immediately on `checkout.completed`. One query, large churn effect.
 - **Phase 0 is not "no product code."** Resolving URLs, pulling releases, cataloguing headings, and building a golden set all require a fetcher and a text extractor. Write them as real code (§3, Stage 0) — they become the watcher and fetcher rather than being thrown away.
 
@@ -338,7 +340,7 @@ Write the six runbooks now, while the failure modes are fresh.
 
 ### Stage 5 — Commercialisation (weeks 5–6)
 
-Stripe products, Checkout links, webhooks, delivery gating on subscription status; magic-link preferences page; suppression handling wired into render; the static landing site (plain HTML on Cloudflare Pages — same vendor as R2) with the redacted sample issue, FAQ, and legal pages; onboarding email with the lawful-use note and immediate back-issue send.
+Stripe products, Checkout links, webhooks, delivery gating on subscription status; magic-link preferences page; suppression handling wired into render; the static landing site (plain HTML on Cloudflare Workers Static Assets — same vendor as R2; **built already, see §4 decision 9**) with the redacted sample issue, FAQ, and legal pages; onboarding email with the lawful-use note and immediate back-issue send.
 
 **Exit:** ≥3 paying subscribers on automated delivery. Kill criterion evaluated honestly.
 
@@ -382,6 +384,30 @@ Every stage is a CLI subcommand and a cron entry. No queue, no workers, no orche
 6. **£49 is the founding rate, £79 is the list price.** Stage 0 pitches £49/mo to the first cohort — spec §2.5's kill criterion, §11 Phase 0 and §14 Q8 all already read it that way ("founding price acceptance at £49 → confidence in £79/£149 list"). PLAN §3's exit criterion said only "£49/mo", which reads as the price, so it is now named explicitly. Terms: **the first 10 subscribers, locked for 12 months**, in exchange for testimonials and feedback calls (spec §1); after that, and for everyone else, the list price applies.
 
    One number to reconcile before Stripe is configured: spec §4.6 defines `founding_*` as **50% off**, which is £39.50 against a £79 list, not £49. £49 is 62% of list. Either the founding products are priced at £49 flat (and §4.6's "50%" is prose to fix) or they are £39.50 (and every "£49" in the spec is wrong). **Decision: £49 flat**, because it is the number in the kill criterion and the one the pitch will actually quote. §4.6's `founding_*` should read "≈62% of list, priced at £49 / £99" rather than "50%".
+
+7. **Platform: Cloudflare, with D1 replacing Postgres for V1.** Costed at **$9.56/month** all-in against a $10 target (INFRA.md, 30 Aug 2026). Workers Paid is the only fixed cost at $5; R2, D1, Cron Triggers, Static Assets and Email Routing all sit inside free tiers at this scale, and the domain is ~$0.85 at Registrar's at-cost pricing.
+
+   This overrides spec §5.2's "Postgres 16, SQLAlchemy + Alembic" and §2.13's managed-Postgres bullet. The written reason spec §5.2 asks for: a managed Postgres at ~£20/month is **twice the entire infrastructure budget**, and at 80 subscribers and ~4,500 events a month, D1's free tier (5 GB, 5M row reads/day) is not remotely stretched. D1 keeps SQLAlchemy usable and keeps PITR, so the §9 backup guarantee survives.
+
+   What it costs us: no PostGIS (see §2.12 as amended), and SQLite's type affinity rather than Postgres types — so the §2.1–2.3 schema fixes need `TEXT`-encoded uuids and explicit `CHECK` constraints where Postgres would have given us native types. **Revisit at ~10,000 subscribers or when the radius query stops being fast**, not before.
+
+8. **Email: Resend at launch, not Postmark.** Spec §5.2 mandates Postmark; its cheapest paid plan is **$15/month**, which breaks the budget on its own, and its free tier is 100 emails/month against a measured need of ~260 at 20 subscribers and ~1,030 at 80. Resend's free tier is 3,000/month (100/day), which covers roughly 150 subscribers. Amazon SES at $0.10/1,000 is the scale-up.
+
+   This is a cost decision, not a quality judgement — Postmark's deliverability reputation is worth paying for once there is a business to protect, and moving back is a one-file change if the sending domain has been warmed properly. **§2.13's rule is untouched: Phase 0 pitch emails go by hand from a normal mailbox, through none of these.**
+
+9. **The pipeline splits at the text-dump cache, because Python Workers cannot run pdfplumber.** Cloudflare's Python Workers run on **Pyodide** — pure-Python and PyEmscripten wheels only. `pdfplumber` → `pdfminer.six` → `cryptography` (Rust) and `pypdfium2` (native C). This is a packaging boundary, not a configuration problem, and **no future session should spend time trying to configure around it.**
+
+   It costs less than it sounds, because `haulier dump` already caches per-page text at `data/text/{region}/{release}.json.gz` keyed by the PDF's SHA-256 — which is exactly the right seam. PDF→text runs in a Cloudflare Container on the existing image; everything downstream (heading analysis, licence harvest, LLM extraction, lead normalisation, digest and CSV rendering) is JSON and Jinja2, and runs on Workers unmodified.
+
+   Measured: **0.79 s per release, 41 ms/page** over 8 sampled releases — 28 vCPU-seconds/month ongoing, against the **375 vCPU-minutes** Workers Paid already includes. That is 0.13% of the allowance. Containers are effectively free here; the $5 plan fee is the whole cost. Use a `basic` instance (¼ vCPU, 1 GiB); nothing measured justifies larger.
+
+10. **Extraction model: costed, still not decided** — decision 4 stands, and Stage 4 still owns the call. The numbers now exist so it is an informed one. At 35 releases/month, ~11.7k input and ~18.9k output tokens each: Haiku 4.5 $3.71/mo standard, Sonnet 5 $7.42, Opus 5 $18.55; Batch API halves each.
+
+    One structural finding worth carrying forward: **output tokens dominate** (660k out against 410k in), because the extracted JSON *is* the product. So prompt caching — normally the first cost lever — saves about $0.20/month here. Model choice is the lever.
+
+    A useful coincidence: Haiku 4.5 on the standard API costs the same as Sonnet 5 on batch ($3.71), but returns synchronously. The Batch API's 24-hour window would consume the whole of spec §7's 24-hour SLO, which alarms at 18 — so **batch is right for the one-off backfill (~$14.31) and wrong for the weekly cycle.**
+
+    **Do not let the $10 target pick the model.** Spec §7 gates extraction at ≥99.5% licence-number precision; whether Haiku 4.5 clears that is a golden-set question for Stage 1. If it does not, Sonnet 5 puts us $3.27 over budget, which against three subscribers at £49 is a rounding error.
 
 ### Still open
 
