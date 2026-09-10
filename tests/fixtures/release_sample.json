@@ -126,6 +126,36 @@
       "transport_managers": [],
       "considerations": ["Repute of transport manager Ignatius Farrow-Delacroix considered under Schedule 3."],
       "notes": "Application refused; the applicant did not demonstrate financial standing."
+    },
+    {
+      "section": "1.1",
+      "event_type": "NEW_APPLICATION",
+      "licence_number": "OF9000007",
+      "licence_type": "R",
+      "operator_name": "ROSALIND VERITY THACKERAY T/A THACKERAY SKIPS",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "THE OLD FORGE, CHURCH LANE, WICKLEWOOD, WYMONDHAM, NR18 9QH",
+      "operating_centres": [
+        {"address": "THE OLD FORGE, CHURCH LANE, WICKLEWOOD, WYMONDHAM, NR18 9QH", "authorisation": "2 vehicle(s), 1 trailer(s)"}
+      ],
+      "transport_managers": [],
+      "notes": null
+    },
+    {
+      "section": "2.1",
+      "event_type": "APPLICATION_GRANTED",
+      "licence_number": "OF9000008",
+      "licence_type": "SN",
+      "operator_name": "PELLINGBROOK & PARTNERS",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "HALL FARM, LOW ROAD, STRUMPSHAW, NORWICH, NR13 4HS",
+      "operating_centres": [
+        {"address": "HALL FARM, LOW ROAD, STRUMPSHAW, NORWICH, NR13 4HS", "authorisation": "4 vehicle(s)"}
+      ],
+      "transport_managers": ["Osric Pellingbrook"],
+      "notes": null
     }
   ]
 }
