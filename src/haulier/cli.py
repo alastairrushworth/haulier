@@ -122,19 +122,25 @@ def capture(
             no_text = [c for c in captured if c.has_text_layer is False]
             unparsed = [c for c in captured if not c.parsed_title]
             probe_failed = [c for c in captured if c.probe_error]
-            superseded = [c for c in captured if c.superseded_sha256]
+            aged_off = [c for c in captured if not c.live]
             pages = sum(c.page_count or 0 for c in captured)
             size_mb = sum(c.byte_size for c in captured) / 1e6
             console.print(
                 f"  {len(captured)} releases, {pages} pages, {size_mb:.1f} MB "
                 f"→ {manifest_path(area)}"
             )
-            if superseded:
-                alarms += len(superseded)
+            if aged_off:
                 console.print(
-                    f"  [bold yellow]{len(superseded)} release(s) re-issued at source[/] "
+                    f"  {len(aged_off)} release(s) no longer on the live page — kept "
+                    "(GOV.UK archives the previous year each January)"
+                )
+            if result.reissued:
+                # Alarm on what is new this run; the manifest keeps the record.
+                alarms += len(result.reissued)
+                console.print(
+                    f"  [bold yellow]{len(result.reissued)} release(s) re-issued at source[/] "
                     "— corrections may be owed (spec §7): "
-                    + ", ".join(c.release_no or "?" for c in superseded)
+                    + ", ".join(c.release_no or "?" for c in result.reissued)
                 )
             if no_text:
                 alarms += len(no_text)
