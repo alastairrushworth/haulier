@@ -2,17 +2,48 @@
 
 The guard is the point: a landing page that looks live but has dead Stripe
 links is worse than an obviously unfinished one. A build with any placeholder
-unresolved must say so loudly and must not be indexable.
+unresolved must say so loudly and must not be indexable — and "any" includes
+the legal placeholders, because three Stripe links used to be enough to drop
+the noindex and the "needs a solicitor" caveat while the data controller was
+still "[ENTITY NAME]".
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
 import pytest
 
-from haulier.site.build import PLACEHOLDERS, PRICING, build_site
+from haulier.config import settings
+from haulier.site.build import (
+    CHECKOUT_PLACEHOLDERS,
+    LEGAL_PLACEHOLDERS,
+    PLACEHOLDERS,
+    PRICING,
+    build_site,
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Placeholders resolve through `Settings`, which is cached and reads `.env`
+    from the working directory. Run each test from an empty directory so a
+    developer's own `.env` cannot make a dry-run test see a live build."""
+    monkeypatch.chdir(tmp_path)
+    settings.cache_clear()
+    yield
+    settings.cache_clear()
+
+
+def _resolve_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    for placeholder in CHECKOUT_PLACEHOLDERS:
+        monkeypatch.setenv(placeholder.env, f"https://buy.stripe.test/{placeholder.key}")
+    monkeypatch.setenv("HAULIER_LEGAL_ENTITY", "Example Data Ltd")
+    monkeypatch.setenv("HAULIER_LEGAL_PROCESSORS", "Cloudflare (EU) and Stripe (US, SCCs).")
+    monkeypatch.setenv("HAULIER_LEGAL_JURISDICTION", "England and Wales.")
+    settings.cache_clear()
 
 
 @pytest.fixture
@@ -37,16 +68,22 @@ def test_dry_run_is_loud_and_not_indexable(built: Path) -> None:
 def test_stub_links_go_nowhere_real(built: Path) -> None:
     index = (built / "index.html").read_text(encoding="utf-8")
     assert "stripe.com" not in index
-    assert index.count('href="#stub-') == len(PLACEHOLDERS)
+    assert index.count('href="#stub-') == len(CHECKOUT_PLACEHOLDERS)
+
+
+def test_legal_pages_say_they_are_drafts_while_unresolved(built: Path) -> None:
+    privacy = (built / "privacy.html").read_text(encoding="utf-8")
+    assert "[ENTITY NAME" in privacy
+    assert "<strong>Draft.</strong>" in privacy and "solicitor" in privacy
 
 
 def test_resolved_build_drops_the_banner_and_indexes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for placeholder in PLACEHOLDERS:
-        monkeypatch.setenv(placeholder.env, f"https://buy.stripe.test/{placeholder.key}")
+    _resolve_all(monkeypatch)
     result = build_site(tmp_path / "live", sample=Path("nope.html"))
     index = (tmp_path / "live" / "index.html").read_text(encoding="utf-8")
+    privacy = (tmp_path / "live" / "privacy.html").read_text(encoding="utf-8")
 
     assert result.unresolved == []
     assert not result.dry_run
@@ -54,6 +91,52 @@ def test_resolved_build_drops_the_banner_and_indexes(
     assert 'content="index,follow"' in index
     assert "https://buy.stripe.test/checkout_founding" in index
     assert "#stub-" not in index
+    assert "Example Data Ltd" in privacy
+    assert "[" not in privacy.split("<main")[1].split("</main>")[0], "no bracketed stubs left"
+    assert "<strong>Draft.</strong>" not in privacy and "solicitor" not in privacy
+
+
+def test_stripe_links_alone_do_not_make_the_build_live(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The regression: with only the checkout URLs set, the old build reported
+    itself live-ready, indexed, and dropped the solicitor caveat while the
+    privacy notice still named "[ENTITY NAME]" as the data controller."""
+    for placeholder in CHECKOUT_PLACEHOLDERS:
+        monkeypatch.setenv(placeholder.env, f"https://buy.stripe.test/{placeholder.key}")
+    settings.cache_clear()
+    result = build_site(tmp_path / "half", sample=Path("nope.html"))
+    index = (tmp_path / "half" / "index.html").read_text(encoding="utf-8")
+    privacy = (tmp_path / "half" / "privacy.html").read_text(encoding="utf-8")
+
+    assert result.dry_run
+    assert {p.key for p in result.unresolved} == {p.key for p in LEGAL_PLACEHOLDERS}
+    assert 'content="noindex,nofollow"' in index
+    assert "HAULIER_LEGAL_ENTITY" in index, "the banner must name what is missing"
+    assert "#stub-" not in index, "the Stripe links themselves are live"
+    assert "<strong>Draft.</strong>" in privacy and "solicitor" in privacy
+
+
+def test_placeholders_resolve_from_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`.env.example` says to copy it to `.env`; the site builder used to read
+    `os.environ` directly and ignore the file."""
+    for placeholder in PLACEHOLDERS:
+        monkeypatch.delenv(placeholder.env, raising=False)
+    (tmp_path / ".env").write_text(
+        "HAULIER_CHECKOUT_SINGLE_URL=https://buy.stripe.test/from-dotenv\n"
+        "HAULIER_LEGAL_ENTITY=Dotenv Data Ltd\n",
+        encoding="utf-8",
+    )
+    settings.cache_clear()
+    result = build_site(tmp_path / "dist", sample=Path("nope.html"))
+    index = (tmp_path / "dist" / "index.html").read_text(encoding="utf-8")
+    privacy = (tmp_path / "dist" / "privacy.html").read_text(encoding="utf-8")
+
+    assert "https://buy.stripe.test/from-dotenv" in index
+    assert "Dotenv Data Ltd" in privacy
+    assert result.dry_run, "the other placeholders are still unresolved"
+    assert "HAULIER_CHECKOUT_SINGLE_URL" not in index
+    assert "HAULIER_CHECKOUT_ALL_URL" in index
 
 
 def test_sample_is_copied_when_present(tmp_path: Path) -> None:
