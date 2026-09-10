@@ -93,7 +93,6 @@ _CORPORATE_TOKENS = frozenset(
         "ASSOCIATION",
         "SOCIETY",
         "FOUNDATION",
-        "PARTNERSHIP",
         "LLC",
         "GMBH",
         "BV",
@@ -152,11 +151,28 @@ _TRADE_TOKENS = frozenset(
     }
 )
 
+#: "SMITH & PARTNERS", "THE X PARTNERSHIP": a partnership unless a legal form
+#: says otherwise ("X PARTNERS LTD" is a company, an LLP is a body corporate).
+#: ~130 operator lines in the 2026 corpus take the "& PARTNERS" shape, and the
+#: extractor does not always give them a `people_role`.
+_PARTNERSHIP_TOKENS = frozenset({"PARTNERS", "PARTNERSHIP"})
+
 #: Two to five plain words — the shape of a person's name in this source.
 _NAME_WORD = r"[A-Za-z][A-Za-z'\u2019.\-]*"
 _PERSONAL_NAME_RE = re.compile(rf"^{_NAME_WORD}(?:\s+{_NAME_WORD}){{1,4}}$")
 
 _HONORIFICS = frozenset({"MR", "MRS", "MS", "MISS", "MX", "DR", "SIR", "DAME", "PROF"})
+
+#: "JOHN SMITH T/A SMITH HAULAGE": the legal entity, then its trading name.
+#: Seen 49 times across the 2026 corpus, mostly on companies — but when the
+#: part before the marker is a bare personal name, the operator is a sole
+#: trader and that name is personal data (spec §8.4, PLAN §2.11).
+_TRADING_AS_RE = re.compile(r"\s+(?:T/A|T/AS|T\.A\.|TRADING\s+AS)\s+", re.IGNORECASE)
+
+
+def legal_name(operator_name: str) -> str:
+    """The entity before any trading-as marker; the whole name when there is none."""
+    return _TRADING_AS_RE.split(operator_name, maxsplit=1)[0].strip()
 
 
 def _looks_personal(name: str) -> bool:
@@ -183,10 +199,15 @@ def is_sole_trader_or_partnership(record: dict[str, Any]) -> bool | None:
     name = record.get("operator_name")
     if not name:
         return None
-    tokens = {token.strip(".,").upper() for token in name.split()}
+    # "C A D SERVICES LIMITED T/A FACILITIES BY ADF" is a company; "JOHN SMITH
+    # T/A SMITH HAULAGE" is a sole trader. The part before the marker decides.
+    entity = legal_name(name)
+    tokens = {token.strip(".,").upper() for token in entity.split()}
     if tokens & _CORPORATE_TOKENS:
         return False
-    return True if _looks_personal(name) else None
+    if tokens & _PARTNERSHIP_TOKENS:
+        return True
+    return True if _looks_personal(entity) else None
 
 
 def place_of(address: str | None) -> str | None:
@@ -266,6 +287,23 @@ class Lead:
     @property
     def label(self) -> str:
         return EVENT_LABELS.get(self.event_type, self.event_type)
+
+    @property
+    def personal_names(self) -> list[str]:
+        """Every full personal name this lead carries — what the public sample
+        must not show. Longest first, so an overlapping shorter name cannot
+        pre-empt a longer one when scrubbing free text.
+
+        The operator name counts when its legal entity is a bare personal name,
+        whether or not it goes on to trade as something else: "JOHN SMITH T/A
+        SMITH HAULAGE" names John Smith just as surely as "JOHN SMITH" does.
+        """
+        names = [n for n in (*self.people, *self.transport_managers) if n]
+        if self.operator_name:
+            entity = legal_name(self.operator_name)
+            if _looks_personal(entity):
+                names.append(entity)
+        return sorted(set(names), key=lambda n: (-len(n), n))
 
     @property
     def first_centre_place(self) -> str | None:
@@ -396,8 +434,11 @@ def redact_name(name: str) -> str:
 
 
 #: Structural words in an operator name that identify nobody, so they survive
-#: redaction and keep "W. & Partners" readable as a partnership.
-_ENTITY_WORDS = frozenset({"AND", "PARTNERS", "PARTNER", "PARTNERSHIP", "SONS", "SON"})
+#: redaction and keep "W. & Partners" readable as a partnership, and
+#: "J. S. T/A S. Haulage" readable as a sole trader with a trading name.
+_ENTITY_WORDS = frozenset(
+    {"AND", "PARTNERS", "PARTNER", "PARTNERSHIP", "SONS", "SON", "T/A", "T/AS", "T.A.", "AS"}
+)
 
 
 def redact_operator_name(name: str) -> str:
@@ -406,18 +447,21 @@ def redact_operator_name(name: str) -> str:
     A partnership's operator name need not contain any partner's full name —
     "Wyndham & Partners" for Cecily and Aubrey Wyndham — so substituting the
     known people out of it is not enough. Every personal token is initialised
-    and only the structural words are kept.
+    and only the structural words are kept. Honorifics are dropped, as in
+    `redact_name`, so "MR BARRY PINCHING" is "B. P." and not "M. B. P.".
     """
     out: list[str] = []
     for token in re.split(r"(\s+|&)", name):
         bare = token.strip(".,()").upper()
         if not token.strip() or token == "&" or not token[0].isalpha():
             out.append(token)
+        elif bare in _HONORIFICS:
+            continue
         elif bare in _ENTITY_WORDS or bare in _CORPORATE_TOKENS or bare in _TRADE_TOKENS:
-            out.append(token.capitalize() if token.isupper() else token)
+            out.append(token.capitalize() if token.isupper() and "/" not in token else token)
         else:
             out.append(f"{token[0].upper()}.")
-    return "".join(out)
+    return " ".join("".join(out).split())
 
 
 def _scrub(text: str | None, names: list[str]) -> str | None:
@@ -448,17 +492,17 @@ def redact_lead(lead: Lead) -> Lead:
     """
     from dataclasses import replace
 
-    names = [n for n in (*lead.people, *lead.transport_managers) if n]
-    if lead.operator_name and _looks_personal(lead.operator_name):
-        names.append(lead.operator_name)
-    # Longest first, so an overlapping shorter name cannot pre-empt a longer one.
-    names.sort(key=len, reverse=True)
+    names = lead.personal_names
 
     # A registered company name is a public business name, not personal data —
     # only a sole trader's or partnership's operator name gets initialised, so
-    # "Patrick B Doyle (Construction) Limited" survives intact.
+    # "Patrick B Doyle (Construction) Limited" survives intact. The second test
+    # is the safety net: whatever the entity flag says, an operator name whose
+    # legal entity reads as a person is a person.
     operator_name = lead.operator_name
-    if operator_name and lead.sole_trader_or_partnership:
+    if operator_name and (
+        lead.sole_trader_or_partnership or _looks_personal(legal_name(operator_name))
+    ):
         operator_name = redact_operator_name(operator_name)
 
     def scrub_addresses(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
