@@ -46,7 +46,9 @@ uv run haulier build-site --serve    # build the landing site and serve it local
 
 `capture` exits non-zero if anything needs a human: an unparsed title (format drift), a
 release re-issued at source, an unreadable PDF, a missing text layer, or a failed fetch.
-It is safe to run from cron and safe to re-run — unchanged releases are not re-fetched.
+It is safe to run from cron and safe to re-run — unchanged releases are not re-fetched,
+and a release that has aged off the live page keeps its manifest row (marked `live:
+false`) for as long as its PDF is on disk, so the January turnover loses nothing.
 
 Captured documents land in `data/` and are gitignored — they are public data under the Open
 Government Licence and fully reproducible from GOV.UK, so the canonical copy belongs in
@@ -63,7 +65,8 @@ uv run pytest -q
 
 Copy `.env.example` to `.env` to override anything in `src/haulier/config.py` — notably
 `HAULIER_OBJECTION_EMAIL` and `HAULIER_PRIVACY_NOTICE_URL`, which the digest footer needs
-(PLAN.md §2.11).
+(PLAN.md §2.11), and the six `build-site` placeholders (Stripe links, legal entity,
+processors, jurisdiction) that keep the landing site in its dry-run state until set.
 
 No test touches the network. Tests that read the captured corpus skip when `data/` is
 absent, so CI runs green on a fresh clone; the regressions they cover are also pinned

@@ -2,7 +2,7 @@
 
 Working log for picking up between sessions. Companion to `PLAN.md` (build plan)
 and `spec.md` (product spec), plus `INFRA.md` (what it costs to run).
-Last updated: **1 Sep 2026**.
+Last updated: **9 Sep 2026**.
 
 ## Where we are
 
@@ -125,6 +125,45 @@ synthetic release with invented names carrying every awkward shape in the real
 corpus (the double-variation collision, a TM inquiry naming someone in `notes`,
 a sole trader, a partnership, a council, an ambiguous trade name).
 
+### Second review pass (9 Sep 2026)
+
+A code review of the branch found the checks green and the redaction claims
+true (independent sweep: 286 names, no full-name leak in the public sample),
+plus six defects, all fixed with regression tests (102 tests now).
+
+1. **The manifest forgot everything the live page no longer listed.** It was
+   rebuilt from the page alone, so the first `capture --all` of January 2027
+   would have emptied every manifest while 275 PDFs sat on disk — and
+   `status`, `dump`, `headings` and `licences` all read the manifest. Rows are
+   now merged: anything on disk stays, with a new `live` flag (False once the
+   release has aged off the page). Same mechanism covers `--limit` and Ctrl-C.
+2. **`superseded_sha256` lasted one run.** The not-refetched branch rebuilt
+   the row from scratch. It now persists, with a new `superseded_on` date for
+   the §7 corrections clock; `CaptureResult.reissued` carries only what was
+   noticed *this* run, so the cron alarm fires once rather than forever.
+3. **A re-issue under a new filename looked like a new release.** Prior rows
+   are now matched by path, then by release number.
+4. **"JOHN SMITH T/A SMITH HAULAGE" leaked in the public sample.** The entity
+   check returned unknown for the shape, so the operator name was kept, and
+   the leak test could not see it because it only swept names already flagged.
+   `legal_name()` splits on the trading-as marker; the part before it decides
+   the entity type and is scrubbed like any other personal name. Same for
+   "X & PARTNERS" without a `people_role` (~130 operator lines in the corpus).
+   `Lead.personal_names` is now the single statement of what must not appear,
+   and both sweep tests use it. Pilot flags and event ids are unchanged.
+5. **Three Stripe links made the site "live-ready"** — noindex cleared and the
+   solicitor caveat vanished with the data controller still "[ENTITY NAME]".
+   The legal entity, processors and jurisdiction are placeholders now too.
+6. **Site placeholders ignored `.env`.** They read `os.environ` directly; now
+   they are `Settings` fields like everything else, and `.env.example` lists
+   them.
+
+Still open from that review (small, deliberately not done here): `_scrub`
+misses names split by irregular whitespace and never scrubs a surname on its
+own; `place_of` on a comma-less address keeps the street; nothing checks that
+the file copied to `sample.html` is the *redacted* digest; the landing copy
+promises radius filtering and Companies House enrichment as if live.
+
 ### Infrastructure decided and priced (1 Sep 2026) — `INFRA.md`
 
 The backend runs on **Cloudflare**, costed at **$9.56/month** all-in against a
@@ -219,11 +258,12 @@ while `dry_run` is true. This discharges most of PLAN §2.11's Stage 0 blocker.
       stratified draws from the ~275-release backfill. Backend interface +
       fixture cache per PLAN §1.6. `tests/` and CI exist now, so the harness
       has somewhere to land.
-- [ ] Keep `haulier capture --all` running weekly (releases drop off the live
-      pages on 1 Jan; capture is cheap, idempotent, and now exits non-zero when
-      something needs looking at, so it can go straight into cron). It was 5
-      releases behind after just two days, so this is the first thing to run
-      when picking the project back up.
+- [ ] Keep `haulier capture --all` running weekly (capture is cheap,
+      idempotent, exits non-zero when something needs looking at, and since
+      9 Sep keeps rows for releases that have aged off the live page, so the
+      January turnover is safe). It was 5 releases behind after two days and a
+      week behind on 9 Sep, so this is the first thing to run when picking the
+      project back up.
 - [ ] **Stand up the Cloudflare account** when Stage 1 starts — Workers Paid,
       R2 bucket, D1 database, one Container, two Cron Triggers, Email Routing.
       Order and rationale in `INFRA.md`.
