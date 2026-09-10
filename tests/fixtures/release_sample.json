@@ -1,0 +1,161 @@
+{
+  "_comment": "Synthetic release reproducing every awkward shape found in the real 2026 corpus, with invented people and companies. It exists so CI exercises the redaction and event-id regressions without committing real personal data (data/ is gitignored and never reaches CI).",
+  "region_slug": "the-east-of-england",
+  "region_name": "East of England",
+  "release_no": "9001",
+  "published_on": "2026-08-05",
+  "objection_deadline": "2026-08-26",
+  "source_title": "AD - 9001 05 August 2026 (objection deadline 26 August 2026)",
+  "records": [
+    {
+      "section": "1.1",
+      "event_type": "NEW_APPLICATION",
+      "licence_number": "OF9000001",
+      "licence_type": "R",
+      "operator_name": "MARTIN OSWALD FEATHERSTONE",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "ROSE COTTAGE, SYERS LANE, BEESTON, KING'S LYNN, PE32 2NJ",
+      "operating_centres": [
+        {"address": "ROSE COTTAGE, SYERS LANE, BEESTON, KING'S LYNN, PE32 2NJ", "authorisation": "3 vehicle(s)"}
+      ],
+      "transport_managers": ["PRIYA NALINI RAGHAVAN"],
+      "notes": null
+    },
+    {
+      "section": "1.1",
+      "event_type": "NEW_APPLICATION",
+      "licence_number": "OF9000002",
+      "licence_type": "SN",
+      "operator_name": "GLADWELL PALLET LINES LIMITED",
+      "people_role": "directors",
+      "people": ["ORLA SIOBHAN KEATING", "Desmond Amaechi Obi"],
+      "correspondence_address": "UNIT 4, HANGAR ROAD, CHELMSFORD, CM2 5AN",
+      "operating_centres": [
+        {"address": "UNIT 4, HANGAR ROAD, CHELMSFORD, CM2 5AN", "authorisation": "12 Heavy goods vehicle(s), 8 trailer(s)"},
+        {"address": "THE DEPOT, KNOWL HILL, MILTON KEYNES, MK5 8HL", "authorisation": "5 Heavy goods vehicle(s)"}
+      ],
+      "transport_managers": [],
+      "notes": null
+    },
+    {
+      "section": "2.3",
+      "event_type": "VARIATION_GRANTED",
+      "licence_number": "OF9000003",
+      "licence_type": "SI",
+      "operator_name": "CALDERWOOD FREIGHT GROUP LTD",
+      "people_role": "directors",
+      "people": ["Hyacinth Adeyemi-Brookes"],
+      "correspondence_address": "TRANSPORT OFFICE, BROADWELL WORKS, OLDBURY, B69 4DA",
+      "operating_centres": [],
+      "variation_changes": [
+        {"kind": "increase_at_existing", "address": "THE DEPOT, KNOWL HILL, MILTON KEYNES, MK5 8HL", "new_authorisation": "12 Heavy goods vehicle(s), 4 trailer(s)"}
+      ],
+      "new_licence_authorisation": [],
+      "transport_managers": [],
+      "notes": null
+    },
+    {
+      "section": "2.3",
+      "event_type": "VARIATION_GRANTED",
+      "licence_number": "OF9000003",
+      "licence_type": "SI",
+      "operator_name": "CALDERWOOD FREIGHT GROUP LTD",
+      "people_role": "directors",
+      "people": ["Hyacinth Adeyemi-Brookes"],
+      "correspondence_address": "TRANSPORT OFFICE, BROADWELL WORKS, OLDBURY, B69 4DA",
+      "operating_centres": [],
+      "variation_changes": [
+        {"kind": "increase_at_existing", "address": "2 FENTON WAY, SHEEPCOTES, CHELMSFORD, CM2 5AN", "new_authorisation": "50 Heavy goods vehicle(s), 32 trailer(s)"}
+      ],
+      "new_licence_authorisation": ["1142 Heavy goods vehicle(s)", "1805 trailer(s)"],
+      "transport_managers": [],
+      "notes": null
+    },
+    {
+      "section": "5.3",
+      "event_type": "PUBLIC_INQUIRY",
+      "licence_number": null,
+      "licence_type": null,
+      "operator_name": null,
+      "people_role": null,
+      "people": ["THEODORE BRANWELL ASHCOMBE"],
+      "correspondence_address": null,
+      "transport_managers": [],
+      "notes": "TM Public Inquiry (Case ID: 999001, Public Inquiry ID: 900001) for THEODORE BRANWELL ASHCOMBE to be held at Quarry House (Leeds), LS2 7UE, on 2 September 2026."
+    },
+    {
+      "section": "7.1",
+      "event_type": "SURRENDER",
+      "licence_number": "OF9000004",
+      "licence_type": "SN",
+      "operator_name": "WYNDHAM & PARTNERS",
+      "people_role": "partners",
+      "people": ["Cecily Wyndham", "Aubrey Wyndham"],
+      "correspondence_address": "SCHOOL FARM, MILL LANE, LENWADE, NORWICH NR9 5SG",
+      "transport_managers": [],
+      "notes": "Licence surrendered WEF 28 July 2026",
+      "effective_date": "2026-07-28"
+    },
+    {
+      "section": "1.2",
+      "event_type": "VARIATION_APPLICATION",
+      "licence_number": "OF9000005",
+      "licence_type": "R",
+      "operator_name": "NORTHWEST LEICESTERSHIRE DISTRICT COUNCIL",
+      "people_role": null,
+      "people": ["Adaeze Nkemdirim"],
+      "correspondence_address": "COUNCIL OFFICES, WHITWICK ROAD, COALVILLE, LE67 3FJ",
+      "operating_centres": [],
+      "variation_changes": [
+        {"kind": "new_centre", "address": "THE YARD, WHITWICK ROAD, COALVILLE, LE67 3FJ", "new_authorisation": "59 vehicle(s)"}
+      ],
+      "new_licence_authorisation": ["59 vehicle(s)"],
+      "transport_managers": ["Rosalind Ffion Pemberton"],
+      "notes": null
+    },
+    {
+      "section": "4.1",
+      "event_type": "APPLICATION_REFUSED",
+      "licence_number": "OF9000006",
+      "licence_type": "SN",
+      "operator_name": "EASTERN PALLET NETWORK",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "UNIT 9, DOCK ROAD, IPSWICH, IP3 0EG",
+      "transport_managers": [],
+      "considerations": ["Repute of transport manager Ignatius Farrow-Delacroix considered under Schedule 3."],
+      "notes": "Application refused; the applicant did not demonstrate financial standing."
+    },
+    {
+      "section": "1.1",
+      "event_type": "NEW_APPLICATION",
+      "licence_number": "OF9000007",
+      "licence_type": "R",
+      "operator_name": "ROSALIND VERITY THACKERAY T/A THACKERAY SKIPS",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "THE OLD FORGE, CHURCH LANE, WICKLEWOOD, WYMONDHAM, NR18 9QH",
+      "operating_centres": [
+        {"address": "THE OLD FORGE, CHURCH LANE, WICKLEWOOD, WYMONDHAM, NR18 9QH", "authorisation": "2 vehicle(s), 1 trailer(s)"}
+      ],
+      "transport_managers": [],
+      "notes": null
+    },
+    {
+      "section": "2.1",
+      "event_type": "APPLICATION_GRANTED",
+      "licence_number": "OF9000008",
+      "licence_type": "SN",
+      "operator_name": "PELLINGBROOK & PARTNERS",
+      "people_role": null,
+      "people": [],
+      "correspondence_address": "HALL FARM, LOW ROAD, STRUMPSHAW, NORWICH, NR13 4HS",
+      "operating_centres": [
+        {"address": "HALL FARM, LOW ROAD, STRUMPSHAW, NORWICH, NR13 4HS", "authorisation": "4 vehicle(s)"}
+      ],
+      "transport_managers": ["Osric Pellingbrook"],
+      "notes": null
+    }
+  ]
+}

@@ -13,6 +13,8 @@ The per-centre change text goes to the card and source_notes instead.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -57,6 +59,164 @@ _CHANGE_LABELS = {
     "removed_centre": "removed centre",
 }
 
+#: Tokens that settle an operator as a corporate body rather than an individual.
+#: Only legal forms and public bodies — trade words like "TRANSPORT" or
+#: "HAULAGE" appear in sole traders' trading names too, and guessing wrong in
+#: this direction is the harmful one (spec §8.4: a sole trader routed to cold
+#: email rather than phone or post).
+_CORPORATE_TOKENS = frozenset(
+    {
+        "LTD",
+        "LIMITED",
+        "PLC",
+        "LLP",
+        "LP",
+        "CIC",
+        "CIO",
+        "UNLIMITED",
+        "INCORPORATED",
+        "INC",
+        "CORP",
+        "CORPORATION",
+        "COMPANY",
+        "HOLDINGS",
+        "GROUP",
+        "COUNCIL",
+        "BOROUGH",
+        "UNIVERSITY",
+        "COLLEGE",
+        "ACADEMY",
+        "SCHOOL",
+        "NHS",
+        "TRUST",
+        "AUTHORITY",
+        "ASSOCIATION",
+        "SOCIETY",
+        "FOUNDATION",
+        "LLC",
+        "GMBH",
+        "BV",
+        "SA",
+    }
+)
+
+#: Trade words. A name carrying one is a business name, whoever holds it — a
+#: sole trader may well trade as "SMITH HAULAGE" — so it settles nothing either
+#: way and the entity type stays unknown rather than being guessed at. Without
+#: this, "EASTERN PALLET NETWORK" is three plain words and reads as a person.
+_TRADE_TOKENS = frozenset(
+    {
+        "TRANSPORT",
+        "HAULAGE",
+        "LOGISTICS",
+        "DISTRIBUTION",
+        "FREIGHT",
+        "CARRIERS",
+        "COURIERS",
+        "COURIER",
+        "REMOVALS",
+        "SKIP",
+        "SKIPS",
+        "PLANT",
+        "TIPPER",
+        "TIPPERS",
+        "CONTRACTORS",
+        "CONTRACTING",
+        "CONSTRUCTION",
+        "ENGINEERING",
+        "SERVICES",
+        "SERVICE",
+        "SUPPLIES",
+        "TRADING",
+        "FARM",
+        "FARMS",
+        "MOTORS",
+        "GARAGE",
+        "RECYCLING",
+        "WASTE",
+        "AGGREGATES",
+        "BUILDERS",
+        "NETWORK",
+        "PALLET",
+        "PALLETS",
+        "EXPRESS",
+        "CARGO",
+        "SHIPPING",
+        "STORAGE",
+        "WAREHOUSING",
+        "SOLUTIONS",
+        "ENTERPRISES",
+        "VEHICLE",
+        "VEHICLES",
+    }
+)
+
+#: "SMITH & PARTNERS", "THE X PARTNERSHIP": a partnership unless a legal form
+#: says otherwise ("X PARTNERS LTD" is a company, an LLP is a body corporate).
+#: ~130 operator lines in the 2026 corpus take the "& PARTNERS" shape, and the
+#: extractor does not always give them a `people_role`.
+_PARTNERSHIP_TOKENS = frozenset({"PARTNERS", "PARTNERSHIP"})
+
+#: Two to five plain words — the shape of a person's name in this source.
+_NAME_WORD = r"[A-Za-z][A-Za-z'\u2019.\-]*"
+_PERSONAL_NAME_RE = re.compile(rf"^{_NAME_WORD}(?:\s+{_NAME_WORD}){{1,4}}$")
+
+_HONORIFICS = frozenset({"MR", "MRS", "MS", "MISS", "MX", "DR", "SIR", "DAME", "PROF"})
+
+#: "JOHN SMITH T/A SMITH HAULAGE": the legal entity, then its trading name.
+#: Seen 49 times across the 2026 corpus, mostly on companies — but when the
+#: part before the marker is a bare personal name, the operator is a sole
+#: trader and that name is personal data (spec §8.4, PLAN §2.11).
+_TRADING_AS_RE = re.compile(r"\s+(?:T/A|T/AS|T\.A\.|TRADING\s+AS)\s+", re.IGNORECASE)
+
+
+def legal_name(operator_name: str) -> str:
+    """The entity before any trading-as marker; the whole name when there is none."""
+    return _TRADING_AS_RE.split(operator_name, maxsplit=1)[0].strip()
+
+
+def _looks_personal(name: str) -> bool:
+    tokens = {token.strip(".,").upper() for token in name.split()}
+    if tokens & (_CORPORATE_TOKENS | _TRADE_TOKENS) or "&" in name or "/" in name:
+        return False
+    return bool(_PERSONAL_NAME_RE.match(name.strip()))
+
+
+def is_sole_trader_or_partnership(record: dict[str, Any]) -> bool | None:
+    """Spec §4.2/§8.4 — True, False, or None when the source will not say.
+
+    `people_role` is the strong signal: the source names *directors* for a
+    company and *partners* for a partnership. Falling back to the operator
+    name, a bare personal name is a sole trader and a legal-form or public-body
+    token is not. Anything else stays None rather than being guessed at — an
+    empty cell tells the subscriber to check, a wrong `no` does not.
+    """
+    role = (record.get("people_role") or "").strip().casefold()
+    if role.startswith(("partner", "sole trader")):
+        return True
+    if role.startswith("director"):
+        return False
+    name = record.get("operator_name")
+    if not name:
+        return None
+    # "C A D SERVICES LIMITED T/A FACILITIES BY ADF" is a company; "JOHN SMITH
+    # T/A SMITH HAULAGE" is a sole trader. The part before the marker decides.
+    entity = legal_name(name)
+    tokens = {token.strip(".,").upper() for token in entity.split()}
+    if tokens & _CORPORATE_TOKENS:
+        return False
+    if tokens & _PARTNERSHIP_TOKENS:
+        return True
+    return True if _looks_personal(entity) else None
+
+
+def place_of(address: str | None) -> str | None:
+    """'Norwich, NR9 5SG' — the part of an address the public sample may keep."""
+    place = town_of(address)
+    code = postcode_of(address)
+    joined = ", ".join(part for part in (place, code) if part)
+    return joined or None
+
 
 def parse_counts(text: str | None) -> tuple[int | None, int | None]:
     """(vehicles, trailers) parsed from an authorisation phrase, summing
@@ -75,13 +235,29 @@ def postcode_of(address: str | None) -> str | None:
     return f"{matches[-1][0]} {matches[-1][1]}" if matches else None
 
 
+def _titlecase(text: str) -> str:
+    """Title-case that survives an apostrophe — `str.title()` gives "King'S Lynn"."""
+    return re.sub(
+        r"[A-Za-z]+(?:['\u2019][A-Za-z]+)?",
+        lambda m: m.group(0).capitalize(),
+        text.casefold(),
+    )
+
+
 def town_of(address: str | None) -> str | None:
-    """Second-to-last comma-separated component, skipping the postcode part."""
+    """The last comma-separated component that is not the postcode.
+
+    The postcode may be its own component or share one with the town
+    ("… , NORWICH NR9 5SG"), so it is stripped either way.
+    """
     if not address:
         return None
-    parts = [p.strip() for p in address.split(",") if p.strip()]
-    parts = [p for p in parts if not _POSTCODE_RE.fullmatch(p.upper().replace("  ", " "))]
-    return parts[-1].title() if parts else None
+    parts = [" ".join(part.split()) for part in address.split(",") if part.strip()]
+    parts = [part for part in parts if not _POSTCODE_RE.fullmatch(part.upper())]
+    if not parts:
+        return None
+    town = _POSTCODE_RE.sub("", parts[-1].upper()).strip(" ,")
+    return _titlecase(town) if town else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,25 +273,61 @@ class Lead:
     people: list[str] = field(default_factory=list)
     correspondence_address: str | None = None
     operating_centres: list[dict[str, Any]] = field(default_factory=list)
+    variation_centres: list[dict[str, Any]] = field(default_factory=list)
+    """The centres a variation changes. The source states them here rather than
+    in `operating_centres`, but they are operating centres all the same."""
     vehicles_authorised: int | None = None
     trailers_authorised: int | None = None
     change_summary: list[str] = field(default_factory=list)
     transport_managers: list[str] = field(default_factory=list)
     considerations: list[str] = field(default_factory=list)
     notes: str | None = None
+    sole_trader_or_partnership: bool | None = None
 
     @property
     def label(self) -> str:
         return EVENT_LABELS.get(self.event_type, self.event_type)
 
     @property
+    def personal_names(self) -> list[str]:
+        """Every full personal name this lead carries — what the public sample
+        must not show. Longest first, so an overlapping shorter name cannot
+        pre-empt a longer one when scrubbing free text.
+
+        The operator name counts when its legal entity is a bare personal name,
+        whether or not it goes on to trade as something else: "JOHN SMITH T/A
+        SMITH HAULAGE" names John Smith just as surely as "JOHN SMITH" does.
+        """
+        names = [n for n in (*self.people, *self.transport_managers) if n]
+        if self.operator_name:
+            entity = legal_name(self.operator_name)
+            if _looks_personal(entity):
+                names.append(entity)
+        return sorted(set(names), key=lambda n: (-len(n), n))
+
+    @property
     def first_centre_place(self) -> str | None:
         for centre in self.operating_centres:
-            place = town_of(centre.get("address"))
-            code = postcode_of(centre.get("address"))
-            if place or code:
-                return ", ".join(p for p in (place, code) if p)
+            place = place_of(centre.get("address"))
+            if place:
+                return place
         return None
+
+    @property
+    def operating_centre_postcodes(self) -> list[str]:
+        """Load-bearing for radius filtering (PLAN §2.12), so it gets its own
+        CSV column rather than staying buried in the address blob.
+
+        Varied centres count. On the pilot release, 51 of 131 leads state their
+        only location in `variation_changes`, and every one of them is an
+        expansion — the highest-value event type there is.
+        """
+        seen: list[str] = []
+        for centre in (*self.operating_centres, *self.variation_centres):
+            code = postcode_of(centre.get("address"))
+            if code and code not in seen:
+                seen.append(code)
+        return seen
 
     @property
     def fleet_line(self) -> str | None:
@@ -128,6 +340,26 @@ class Lead:
         if self.trailers_authorised is not None:
             parts.append(plural(self.trailers_authorised, "trailer"))
         return " / ".join(parts) if parts else None
+
+
+def content_hash(record: dict[str, Any]) -> str:
+    """SHA-256 over the record's canonical JSON — PLAN §2.9's `content_hash`.
+
+    Hashing the whole record rather than a chosen subset of fields is what
+    makes the id genuinely content-addressed. The earlier subset key
+    (release|section|licence|event_type|operator|notes) collided on real data:
+    East of England 5599 carries two DPDGROUP variations on OF0217601 that
+    differ only in which operating centre changed, so the second — a
+    50-vehicle expansion — hashed identically to the first. That is PLAN §2.2's
+    legitimate-duplicate case, and it is a recall failure the recall metric
+    cannot see, because the reconciliation counts licence numbers before
+    anything downstream dedupes on the id.
+
+    Key order is irrelevant (`sort_keys`), so re-runs are idempotent as long as
+    the extractor is.
+    """
+    canonical = json.dumps(record, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _change_summary(record: dict[str, Any]) -> list[str]:
@@ -161,11 +393,9 @@ def build_lead(record: dict[str, Any], release: dict[str, Any]) -> Lead:
     content_key = "|".join(
         [
             release["release_no"],
-            record.get("section") or "",
             record.get("licence_number") or "",
             record.get("event_type") or "",
-            record.get("operator_name") or "",
-            record.get("notes") or "",
+            content_hash(record),
         ]
     )
     return Lead(
@@ -180,16 +410,122 @@ def build_lead(record: dict[str, Any], release: dict[str, Any]) -> Lead:
         people=record.get("people") or [],
         correspondence_address=record.get("correspondence_address"),
         operating_centres=centres,
+        variation_centres=record.get("variation_changes") or [],
         vehicles_authorised=vehicles,
         trailers_authorised=trailers,
         change_summary=_change_summary(record),
         transport_managers=record.get("transport_managers") or [],
         considerations=record.get("considerations") or [],
         notes=record.get("notes"),
+        sole_trader_or_partnership=is_sole_trader_or_partnership(record),
     )
 
 
 def redact_name(name: str) -> str:
-    """'JOHN ANDREW KILLETT' → 'J. A. K.' for the public sample (PLAN §2.11)."""
-    initials = [part[0].upper() for part in re.split(r"[\s-]+", name) if part and part[0].isalpha()]
+    """'JOHN ANDREW KILLETT' → 'J. A. K.' for the public sample (PLAN §2.11).
+
+    Honorifics are dropped rather than initialised, so 'Mr CHRISTOPHER
+    DARBYSHIRE' reads 'C. D.' and not 'M. C. D.'.
+    """
+    parts = [part for part in re.split(r"[\s-]+", name) if part and part[0].isalpha()]
+    parts = [part for part in parts if part.strip(".").upper() not in _HONORIFICS] or parts
+    initials = [part[0].upper() for part in parts]
     return " ".join(f"{i}." for i in initials) if initials else name
+
+
+#: Structural words in an operator name that identify nobody, so they survive
+#: redaction and keep "W. & Partners" readable as a partnership, and
+#: "J. S. T/A S. Haulage" readable as a sole trader with a trading name.
+_ENTITY_WORDS = frozenset(
+    {"AND", "PARTNERS", "PARTNER", "PARTNERSHIP", "SONS", "SON", "T/A", "T/AS", "T.A.", "AS"}
+)
+
+
+def redact_operator_name(name: str) -> str:
+    """'WYNDHAM & PARTNERS' → 'W. & Partners'; 'BARRY PINCHING' → 'B. P.'.
+
+    A partnership's operator name need not contain any partner's full name —
+    "Wyndham & Partners" for Cecily and Aubrey Wyndham — so substituting the
+    known people out of it is not enough. Every personal token is initialised
+    and only the structural words are kept. Honorifics are dropped, as in
+    `redact_name`, so "MR BARRY PINCHING" is "B. P." and not "M. B. P.".
+    """
+    out: list[str] = []
+    for token in re.split(r"(\s+|&)", name):
+        bare = token.strip(".,()").upper()
+        if not token.strip() or token == "&" or not token[0].isalpha():
+            out.append(token)
+        elif bare in _HONORIFICS:
+            continue
+        elif bare in _ENTITY_WORDS or bare in _CORPORATE_TOKENS or bare in _TRADE_TOKENS:
+            out.append(token.capitalize() if token.isupper() and "/" not in token else token)
+        else:
+            out.append(f"{token[0].upper()}.")
+    return " ".join("".join(out).split())
+
+
+def _scrub(text: str | None, names: list[str]) -> str | None:
+    """Replace each known personal name in free text with its initials."""
+    if not text:
+        return text
+    for name in names:
+        text = re.sub(re.escape(name), redact_name(name), text, flags=re.IGNORECASE)
+    return text
+
+
+def redact_lead(lead: Lead) -> Lead:
+    """Everything the public sample must not carry (PLAN §2.11).
+
+    Redacting the `people` and `transport_managers` lists alone leaves three
+    open channels, all of which are populated in East of England 5599:
+
+      1. `notes` — a transport-manager public inquiry names the individual in
+         its free text ("... for GEORGE THOMAS to be held at ...").
+      2. `operator_name` — a sole trader's or partnership's operator name *is*
+         a personal name.
+      3. `correspondence_address` and operating-centre addresses — for a sole
+         trader these are, very often, a home address.
+
+    Names known for the lead are scrubbed out of every free-text field, and a
+    non-corporate operator's addresses are reduced to town and postcode, which
+    is all the sample needs to make its point.
+    """
+    from dataclasses import replace
+
+    names = lead.personal_names
+
+    # A registered company name is a public business name, not personal data —
+    # only a sole trader's or partnership's operator name gets initialised, so
+    # "Patrick B Doyle (Construction) Limited" survives intact. The second test
+    # is the safety net: whatever the entity flag says, an operator name whose
+    # legal entity reads as a person is a person.
+    operator_name = lead.operator_name
+    if operator_name and (
+        lead.sole_trader_or_partnership or _looks_personal(legal_name(operator_name))
+    ):
+        operator_name = redact_operator_name(operator_name)
+
+    def scrub_addresses(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [{**entry, "address": place_of(entry.get("address"))} for entry in entries]
+
+    reduce_addresses = lead.sole_trader_or_partnership is not False
+    return replace(
+        lead,
+        operator_name=operator_name,
+        people=[redact_name(n) for n in lead.people],
+        transport_managers=[redact_name(n) for n in lead.transport_managers],
+        notes=_scrub(lead.notes, names),
+        considerations=[c for c in (_scrub(c, names) for c in lead.considerations) if c],
+        change_summary=[c for c in (_scrub(c, names) for c in lead.change_summary) if c],
+        correspondence_address=(
+            place_of(lead.correspondence_address)
+            if reduce_addresses
+            else _scrub(lead.correspondence_address, names)
+        ),
+        operating_centres=(
+            scrub_addresses(lead.operating_centres) if reduce_addresses else lead.operating_centres
+        ),
+        variation_centres=(
+            scrub_addresses(lead.variation_centres) if reduce_addresses else lead.variation_centres
+        ),
+    )

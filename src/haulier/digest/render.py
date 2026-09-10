@@ -15,9 +15,20 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .leads import HEAT_ORDER, Lead, redact_name
+from ..config import settings
+from .leads import HEAT_ORDER, Lead, redact_lead
 
-#: Spec §4.4 — do not reorder, do not remove.
+#: Spec §4.4 — do not reorder, do not remove. Additions go on the end only.
+#:
+#: The last two are additions to §4.4's list (PLAN §2.14):
+#:   * `operating_centre_postcodes` — PLAN §2.12 makes operating-centre
+#:     postcode load-bearing for radius filtering, and it cannot be filtered on
+#:     while it is buried in the address blob.
+#:   * `is_sole_trader_or_partnership` — required by spec §4.2 and §8.4
+#:     ("prominently in the CSV"), but missing from §4.4's own column list.
+#:     Subscribers route these to phone or post rather than cold email, so the
+#:     column is PECR-load-bearing rather than cosmetic.
+# fmt: off
 CSV_COLUMNS = [
     "event_id", "event_type", "event_date", "publication_region",
     "publication_release", "publication_date", "licence_number",
@@ -27,8 +38,11 @@ CSV_COLUMNS = [
     "ch_company_number", "ch_company_status", "ch_incorporated_on",
     "ch_directors", "ch_sic_codes", "ch_match_confidence", "vol_url",
     "source_notes", "first_seen_date",
+    "operating_centre_postcodes", "is_sole_trader_or_partnership",
 ]
+# fmt: on
 
+# fmt: off
 HEAT = {
     "NEW_APPLICATION": "★★★", "VARIATION_APPLICATION": "★★★",
     "APPLICATION_GRANTED": "★★★", "VARIATION_GRANTED": "★★★",
@@ -36,6 +50,7 @@ HEAT = {
     "PUBLIC_INQUIRY": "★", "APPLICATION_REFUSED": "★",
     "APPLICATION_WITHDRAWN": "★",
 }
+# fmt: on
 
 GROUP_TITLES = {
     "NEW_APPLICATION": "New applications",
@@ -82,19 +97,12 @@ def subject_line(release: dict[str, Any], leads: list[Lead]) -> str:
 
 
 def _maybe_redact(lead: Lead, redact: bool) -> Lead:
-    if not redact:
-        return lead
-    from dataclasses import replace
-
-    return replace(
-        lead,
-        people=[redact_name(n) for n in lead.people],
-        transport_managers=[redact_name(n) for n in lead.transport_managers],
-    )
+    return redact_lead(lead) if redact else lead
 
 
 def render_html(release: dict[str, Any], leads: list[Lead], *, redact: bool = False) -> str:
     leads = [_maybe_redact(lead, redact) for lead in leads]
+
     def tally(*event_types: str) -> int:
         return sum(1 for lead in leads if lead.event_type in event_types)
 
@@ -104,20 +112,32 @@ def render_html(release: dict[str, Any], leads: list[Lead], *, redact: bool = Fa
         "granted": tally("APPLICATION_GRANTED", "VARIATION_GRANTED"),
         "surrendered / revoked": tally("SURRENDER", "REVOCATION"),
     }
-    return _env().get_template("digest.html.j2").render(
-        subject=subject_line(release, leads),
-        region_name=release["region_name"],
-        release_no=release["release_no"],
-        published_on=release["published_on"],
-        objection_deadline=release.get("objection_deadline") or "—",
-        summary=[(count, caption) for caption, count in counts.items()],
-        groups=group_by_heat(leads),
-        total=len(leads),
+    return (
+        _env()
+        .get_template("digest.html.j2")
+        .render(
+            subject=subject_line(release, leads),
+            region_name=release["region_name"],
+            release_no=release["release_no"],
+            published_on=release["published_on"],
+            objection_deadline=release.get("objection_deadline") or "—",
+            summary=[(count, caption) for caption, count in counts.items()],
+            groups=group_by_heat(leads),
+            total=len(leads),
+            objection_email=settings().objection_route,
+            privacy_notice_url=settings().privacy_notice_url,
+        )
     )
 
 
 def _blank_if_none(value: int | None) -> int | str:
     return value if value is not None else ""
+
+
+def _yes_no(value: bool | None) -> str:
+    """Three-state: an empty cell means the source would not say, which tells
+    the subscriber to check rather than asserting a wrong 'no' (spec §8.4)."""
+    return "" if value is None else ("yes" if value else "no")
 
 
 def render_csv(release: dict[str, Any], leads: list[Lead], *, redact: bool = False) -> str:
@@ -148,19 +168,23 @@ def render_csv(release: dict[str, Any], leads: list[Lead], *, redact: bool = Fal
                 "trading_name": "",
                 "correspondence_address": lead.correspondence_address or "",
                 "operating_centres": " | ".join(
-                    f"{c.get('address')} [{c.get('authorisation')}]"
-                    for c in lead.operating_centres
+                    f"{c.get('address')} [{c.get('authorisation')}]" for c in lead.operating_centres
                 ),
                 "vehicles_authorised": _blank_if_none(lead.vehicles_authorised),
                 "trailers_authorised": _blank_if_none(lead.trailers_authorised),
                 "vehicles_delta": "",
                 "trailers_delta": "",
-                "ch_company_number": "", "ch_company_status": "",
-                "ch_incorporated_on": "", "ch_directors": "",
-                "ch_sic_codes": "", "ch_match_confidence": "",
+                "ch_company_number": "",
+                "ch_company_status": "",
+                "ch_incorporated_on": "",
+                "ch_directors": "",
+                "ch_sic_codes": "",
+                "ch_match_confidence": "",
                 "vol_url": "",
                 "source_notes": "; ".join(notes),
                 "first_seen_date": "",
+                "operating_centre_postcodes": " | ".join(lead.operating_centre_postcodes),
+                "is_sole_trader_or_partnership": _yes_no(lead.sole_trader_or_partnership),
             }
         )
     return buffer.getvalue()

@@ -1,0 +1,94 @@
+{% extends "base.html.j2" %}
+{% block title %}Privacy notice — {{ product }}{% endblock %}
+{% block description %}How {{ product }} processes personal data from public registers, and how to object.{% endblock %}
+
+{% block body %}
+<main class="legal">
+  <div class="wrap">
+    <h1>Privacy notice</h1>
+    <p class="updated">Last updated {{ today }}. This notice covers people whose details appear in
+      our lead data, and separately our own subscribers.</p>
+
+    <h2>Who we are</h2>
+    <p>{{ legal.entity }} ({{ product }}) is the data controller.
+      {%- if legal.address %} Registered address: {{ legal.address }}.{% endif %}
+      You can reach us at <a href="mailto:{{ objection_email }}">{{ objection_email }}</a>.</p>
+
+    <h2>If you are named in our data</h2>
+
+    <h3>Where we got it</h3>
+    <p>We did not get it from you. We take it from two public sources:</p>
+    <ul>
+      <li>The Traffic Commissioners' <em>Applications &amp; Decisions</em> publications on GOV.UK,
+        which are published as a matter of statute and licensed under the Open Government Licence v3.0.</li>
+      <li>Companies House, where a licence holder matches a registered company.</li>
+    </ul>
+    <p>We do not buy lists, and we do not collect anything about you from anywhere else.</p>
+
+    <h3>What we hold</h3>
+    <p>Only what those sources publish: your name; your role (director, partner, sole trader or
+      transport manager); the operator's correspondence address and operating centres, which for a
+      sole trader may be a home address; the licence number, type and authorised fleet; and the
+      event that put you in the publication — an application, variation, decision or public inquiry.
+      We hold no financial data, no contact details of yours beyond what the register publishes,
+      and nothing that is not already public.</p>
+
+    <h3>Why we process it, and on what basis</h3>
+    <p>Our lawful basis is <strong>legitimate interests</strong> (UK GDPR Article 6(1)(f)). Our
+      interest is running a business-to-business information service; our subscribers' interest is
+      finding new commercial customers. We have assessed this against your interests and rights and
+      concluded it is proportionate, because the data is already published by a public authority
+      for the express purpose of making licensing decisions visible and open to objection, we
+      publish only what that source publishes, and we act on any objection.</p>
+    <p>Because we did not get the data from you, Article 14 applies: this notice is how we tell you
+      we hold it. If you would like the full legitimate interests assessment, ask and we will send it.</p>
+
+    <h3>Who sees it</h3>
+    <p>Our subscribers — businesses that sell to hauliers — receive it as an email digest and a CSV.
+      We tell them the data is public record, that they must comply with UK GDPR and PECR when
+      contacting anyone in it, and we mark sole traders and partnerships so they are routed to
+      phone or post rather than cold email. We do not sell your data on as a list and our terms
+      forbid subscribers from redistributing it.</p>
+
+    <h3>How long we keep it</h3>
+    <p>We keep the source publications indefinitely, because they are the public record and we need
+      them to show where any figure came from. Enrichment data drawn from Companies House is
+      refreshed or removed on a twelve-month cycle. If you object, we keep the minimum needed to
+      make sure you stay suppressed.</p>
+
+    <h3>Your rights, and how to use them</h3>
+    <p>You can ask us for a copy of what we hold about you, ask us to correct it, ask us to delete
+      it, ask us to restrict how we use it, and <strong>object to us processing it at all</strong>.
+      Because we rely on legitimate interests, an objection is a strong right: tell us and we will
+      stop, unless we can show compelling grounds that override yours.</p>
+    <p>Email <a href="mailto:{{ objection_email }}">{{ objection_email }}</a>. We will act within
+      30 days and add you to a suppression list so you do not reappear in a later digest. There is
+      no charge and you do not have to give a reason.</p>
+    <p>Note that we cannot remove you from the underlying GOV.UK publication — only the Traffic
+      Commissioner can do that. We can only stop <em>our</em> processing.</p>
+    <p>If we get it wrong, you can complain to the Information Commissioner's Office at
+      <a href="https://ico.org.uk/make-a-complaint/">ico.org.uk</a>.</p>
+
+    <h2>If you are a subscriber</h2>
+    <p>We hold your email address, company name, delivery preferences and subscription status. We
+      process it to run your subscription — a contract basis — and we keep it while you subscribe
+      and for six years afterwards for accounting. Payments are handled by Stripe; we never see
+      your card details.</p>
+
+    <h2>Where your data is processed</h2>
+    <p>{{ legal.processors }}</p>
+
+    <h2>Changes</h2>
+    <p>If we change how we process personal data we will update this notice and, where the change
+      is significant, say so in the digest.</p>
+
+    {%- if dry_run %}
+    <hr>
+    <p class="updated"><strong>Draft.</strong> This notice describes what the system actually does
+      and is written to be honest rather than defensive, but it has not been reviewed by a
+      solicitor. Have it checked before it goes live, and fill in the entity and processor details
+      above.</p>
+    {%- endif %}
+  </div>
+</main>
+{% endblock %}

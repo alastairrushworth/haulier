@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ product }}{% endblock %}</title>
+<meta name="description" content="{% block description %}Weekly HGV operator-licence leads from the Traffic Commissioners' Applications &amp; Decisions, structured and filtered by territory.{% endblock %}">
+{%- if not dry_run %}
+<meta name="robots" content="index,follow">
+{%- else %}
+<meta name="robots" content="noindex,nofollow">
+{%- endif %}
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+{%- if dry_run %}
+<div class="dry-run">
+  <div class="wrap">
+    <strong>Dry run build</strong> — this site is not connected to any live service.
+    {{ unresolved | length }} placeholder{{ '' if unresolved | length == 1 else 's' }} unresolved:
+    <ul>
+      {%- for item in unresolved %}
+      <li><code>{{ item.env }}</code> — {{ item.note }}</li>
+      {%- endfor %}
+    </ul>
+  </div>
+</div>
+{%- endif %}
+
+<header class="masthead">
+  <div class="wrap">
+    <span class="brand">{{ product }}</span>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/sample.html">Sample issue</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+    </nav>
+  </div>
+</header>
+
+{% block body %}{% endblock %}
+
+<footer>
+  <div class="wrap">
+    <p>{{ product }} — weekly operator-licence leads from the Traffic Commissioners'
+      <em>Applications &amp; Decisions</em>.</p>
+    <p>Contains public sector information licensed under the
+      <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a>.</p>
+    <p><a href="/privacy.html">Privacy notice</a> · <a href="/terms.html">Terms</a> ·
+      Object to being listed: <a href="mailto:{{ objection_email }}">{{ objection_email }}</a></p>
+  </div>
+</footer>
+</body>
+</html>

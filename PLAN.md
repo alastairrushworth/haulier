@@ -67,20 +67,22 @@ Release numbers are **per-region sequential** (NW at 7167, Scotland at 2481), wh
 
 ### 1.5 Measured: volume per traffic area, prefix map, and the real section taxonomy
 
-Measured directly by downloading the four most recent releases from each of the eight regions (32 PDFs) and counting.
+Measured directly by downloading the four most recent releases from each of the eight regions (32 PDFs) and counting. **Superseded by the full-2026-corpus measurement** once Stage 0 item 2 completed — the four-release sample ran high everywhere, but the ranking did not move, so no decision built on it changes.
 
 **Distinct licence numbers per release** — the reliable proxy for lead volume:
 
-| Traffic area | Licences/release | Mean pages | Prefix |
-|---|---:|---:|---|
-| **East of England** | **167.2** | 32.1 | `OF` |
-| North East | 112.0 | 26.0 | `OB` |
-| West of England | 94.5 | 24.0 | `OH` |
-| West Midlands | 89.5 | 24.9 | `OD` |
-| North West | 88.0 | 23.1 | `OC` |
-| London & South East | 81.5 | 21.3 | `OK` |
-| Scotland | 48.2 | 16.0 | `OM` |
-| Wales | 32.2 | 15.4 | `OG` |
+| Traffic area | 32-PDF sample | Full 2026 corpus | Home-prefix share | Prefix |
+|---|---:|---:|---:|---|
+| **East of England** | 167.2 | **156.0** | 99.94% | `OF` |
+| North East | 112.0 | 105.6 | 99.86% | `OB` |
+| West of England | 94.5 | 99.7 | 99.81% | `OH` |
+| West Midlands | 89.5 | 90.5 | 99.95% | `OD` |
+| North West | 88.0 | 89.7 | 99.89% | `OC` |
+| London & South East | 81.5 | 80.1 | 99.82% | `OK` |
+| Scotland | 48.2 | 43.2 | 99.78% | `OM` |
+| Wales | 32.2 | 36.2 | 99.62% | `OG` |
+
+The full-corpus column is 270 releases (~34 per region) as at 30 Aug 2026 and moves a little each week as new releases land. `data/recon/licences.json` is the source of truth — regenerate with `haulier licences --all` rather than trusting this table to be current. Quote these numbers, not the 32-PDF sample.
 
 **§14 Q2 answered — `licence_prefix_map` seeded empirically.** All eight prefixes are `O` + a region letter, exactly as tabulated above; cross-region contamination in the sample was 3 occurrences out of ~2,900 (incidental cross-references). The spec's `^[OP][A-Z][0-9]{6,7}$` regex holds. No `P`-prefixed (PSV) numbers appeared in any goods document, which also answers §14 Q3: **there are no combined goods+PSV documents** in this corpus.
 
@@ -250,7 +252,9 @@ CREATE TABLE postcodes (            -- ONS Postcode Directory, OGL v3
   lat double precision, lon double precision, region text);
 ```
 
-A lead matches if **either** its traffic area is in `regions` **or** any of its operating centres falls inside any `radius_filters` entry. Requires the [ONS Postcode Directory](https://geoportal.statistics.gov.uk/) (free, OGL v3, ~2.6M rows — a static load, refreshed a couple of times a year) plus `earthdistance`/PostGIS for the distance query.
+A lead matches if **either** its traffic area is in `regions` **or** any of its operating centres falls inside any `radius_filters` entry. Requires the [ONS Postcode Directory](https://geoportal.statistics.gov.uk/) (free, OGL v3, ~2.6M rows — a static load, refreshed a couple of times a year).
+
+**Amended by §4 decision 7:** the distance query was specified as `earthdistance`/PostGIS, and D1 has neither. It becomes a bounding-box prefilter in SQL (cheap, indexed on lat/lon) plus a haversine check in the Worker. At 2.6M postcodes and ~80 subscribers that is fine; at 10,000 subscribers it would not be, and that is the point to revisit the database.
 
 Two consequences worth naming:
 
@@ -261,9 +265,18 @@ Two consequences worth naming:
 
 - **Stripe Tax / VAT:** at the target £5–8k MRR the business is well under the £90k UK VAT registration threshold. Don't register, don't enable Stripe Tax, revisit at £70k ARR. Removes a whole category of billing complexity from Phase 2.
 - **Phase 0 pitch emails must not go via Postmark.** Twenty cold emails from a brand-new sending domain is the fastest route to a poor sender reputation, and it would poison the deliverability of the actual product later. Send them by hand from a normal mailbox. Postmark comes online in Stage 4 for internal digests, with SPF/DKIM/DMARC configured and a two-week warm-up before the first paying send.
-- **Managed Postgres, not self-hosted.** §9 mandates nightly backups plus a *weekly scripted restore test*. On a side project that chore gets skipped by month two. Neon or Fly Postgres with PITR makes the guarantee real for ~£20/month and deletes a runbook.
+- ~~**Managed Postgres, not self-hosted.**~~ **Superseded by §4 decision 7 — see INFRA.md.** The reasoning still holds (§9 mandates nightly backups plus a *weekly scripted restore test*, and on a side project that chore gets skipped by month two), but the conclusion does not: D1 has point-in-time recovery on the plan we are already paying for, which deletes the same runbook for £0 rather than ~£20/month. That £20 would have been twice the entire infrastructure budget.
 - **Onboarding gap:** a subscriber who pays on day 2 of their region's week waits until day 8 for anything. Send the most recent already-published digest for their regions immediately on `checkout.completed`. One query, large churn effect.
 - **Phase 0 is not "no product code."** Resolving URLs, pulling releases, cataloguing headings, and building a golden set all require a fetcher and a text extractor. Write them as real code (§3, Stage 0) — they become the watcher and fetcher rather than being thrown away.
+
+### 2.14 Two columns missing from the §4.4 CSV contract
+
+§4.4 fixes the CSV columns as "a stable API — additive changes only", but its own list omits two fields the rest of the spec relies on. Both are appended now, while the contract is still cheap to change and no subscriber has seen it.
+
+- **`is_sole_trader_or_partnership`** — §4.2 lists it as a derived field and §8.4 asks for it "prominently in the CSV so customers can route those to phone/post rather than cold email". It is PECR-load-bearing: the whole point is that a subscriber must treat these leads differently. Derived three-state from `people_role` (the source names *directors* for a company and *partners* for a partnership), falling back to the operator name — a bare personal name is a sole trader, a legal-form or public-body token is not. Anything else stays **empty rather than guessed**, because an empty cell tells the subscriber to check while a wrong `no` invites them to cold-email an individual. On East of England 5599 that is 11 flagged, 113 corporate, 7 unknown — the unknowns being transport-manager public inquiries with no operator at all.
+- **`operating_centre_postcodes`** — §2.12 promotes operating-centre postcode to a first-class field because radius filtering depends on it, but the CSV only had the `operating_centres` address blob, which cannot be filtered on. Pipe-separated, de-duplicated, in centre order.
+
+A useful side effect: the transport-manager public inquiries that appear in a region's publication but are *held* elsewhere (Leeds, Warrington, Edinburgh, Belfast in 5599 alone) now carry an empty postcode column. Region filtering still includes them — they were published in that region, which is a fact — and radius filtering will naturally exclude them, which is the correct answer for a lead with no location in anyone's patch.
 
 ---
 
@@ -285,7 +298,7 @@ Then, by hand plus Claude: take one busy region's latest release, extract every 
 
 In parallel: register the Companies House API key, read the VOL terms, confirm the data.gov.uk register dataset's freshness/columns/licence, publish the privacy notice and objection inbox.
 
-**Exit:** pilot digest sent to 15–20 targets at £49/mo; ≥3 verbal yeses. Kill criterion evaluated honestly. All of §14 Q1–Q9 answered in writing.
+**Exit:** pilot digest sent to 15–20 targets at the **£49/mo founding rate** (§4, decision 6 — a named, time-limited price, not the list price); ≥3 verbal yeses. Kill criterion evaluated honestly. All of §14 Q1–Q9 answered in writing.
 
 ### Stage 1 — Skeleton, data model, golden-set harness (week 1)
 
@@ -327,7 +340,7 @@ Write the six runbooks now, while the failure modes are fresh.
 
 ### Stage 5 — Commercialisation (weeks 5–6)
 
-Stripe products, Checkout links, webhooks, delivery gating on subscription status; magic-link preferences page; suppression handling wired into render; the static landing site (plain HTML on Cloudflare Pages — same vendor as R2) with the redacted sample issue, FAQ, and legal pages; onboarding email with the lawful-use note and immediate back-issue send.
+Stripe products, Checkout links, webhooks, delivery gating on subscription status; magic-link preferences page; suppression handling wired into render; the static landing site (plain HTML on Cloudflare Workers Static Assets — same vendor as R2; **built already, see §4 decision 9**) with the redacted sample issue, FAQ, and legal pages; onboarding email with the lawful-use note and immediate back-issue send.
 
 **Exit:** ≥3 paying subscribers on automated delivery. Kill criterion evaluated honestly.
 
@@ -360,13 +373,41 @@ Every stage is a CLI subcommand and a cron entry. No queue, no workers, no orche
 ## 4. Decisions taken
 
 1. **Ramp: all 8 regions live from day one, sampled QA.** The 100%-review gate in spec §5.3[9] is removed; the 24h SLO stands. Safety comes from calibrating the sampler against the Stage 0 backfill before launch, plus stratified sampling, a risk-ranked queue, and a guard-rate circuit breaker (§2.6).
-2. **Territory: support both region and postcode-radius filtering**, region as the default (§2.12). Operating-centre postcode is promoted to a gated extraction field. Pricing tiers stay at £79/£149 for now and are revisited in Phase 2 once 20 sales conversations have happened — the schema supports either shape.
+2. **Territory: support both region and postcode-radius filtering**, region as the default (§2.12). Operating-centre postcode is promoted to a gated extraction field. List prices stay at £79/£149 for now and are revisited in Phase 2 once 20 sales conversations have happened — the schema supports either shape. The £49 pitched at Stage 0 is the founding rate, not a third tier (decision 6).
 3. **Backfill: capture all 2026 releases from the live pages during Stage 0** — ~250 PDFs. Doubles as the calibration corpus, the heading-map seed, and 8 months of `first_seen_date` history. National Archives backfill for 2024–25 stays in Phase 3.
 4. **Production extraction backend: decided at Stage 4.** Build and test run locally on the Max subscription with a fixture cache for CI (§1.5); no API key exists before then.
 
-5. **Lead region: East of England** (`OF`). Measured at 167 distinct licences per release — 1.5× the next region, 2× the median, 5× Wales (§1.5). The traffic area covers Leicestershire, Northamptonshire, Lincolnshire, Bedfordshire, Buckinghamshire, Cambridgeshire, Hertfordshire, Essex, Norfolk and Suffolk, plus Leicester, Luton, Milton Keynes, Peterborough, Rutland, Southend-on-Sea and Thurrock — i.e. the Midlands "golden triangle" logistics corridor, the Thames Gateway, and the Felixstowe hinterland. Both the volume and the geography point the same way. Pilot digest, golden set, and first sales conversations all start here.
+5. **Lead region: East of England** (`OF`). Measured over the full 2026 corpus at **~156 distinct licences per release** — 1.5× the next region, 1.7× the median, 4× Wales (§1.5). The traffic area covers Leicestershire, Northamptonshire, Lincolnshire, Bedfordshire, Buckinghamshire, Cambridgeshire, Hertfordshire, Essex, Norfolk and Suffolk, plus Leicester, Luton, Milton Keynes, Peterborough, Rutland, Southend-on-Sea and Thurrock — i.e. the Midlands "golden triangle" logistics corridor, the Thames Gateway, and the Felixstowe hinterland. Both the volume and the geography point the same way. Pilot digest, golden set, and first sales conversations all start here.
 
    Tradeoff accepted: East of England is also the heaviest QA load per release. That is the right way round — prove the accuracy gates on the hardest region and every other region is easier.
+
+6. **£49 is the founding rate, £79 is the list price.** Stage 0 pitches £49/mo to the first cohort — spec §2.5's kill criterion, §11 Phase 0 and §14 Q8 all already read it that way ("founding price acceptance at £49 → confidence in £79/£149 list"). PLAN §3's exit criterion said only "£49/mo", which reads as the price, so it is now named explicitly. Terms: **the first 10 subscribers, locked for 12 months**, in exchange for testimonials and feedback calls (spec §1); after that, and for everyone else, the list price applies.
+
+   One number to reconcile before Stripe is configured: spec §4.6 defines `founding_*` as **50% off**, which is £39.50 against a £79 list, not £49. £49 is 62% of list. Either the founding products are priced at £49 flat (and §4.6's "50%" is prose to fix) or they are £39.50 (and every "£49" in the spec is wrong). **Decision: £49 flat**, because it is the number in the kill criterion and the one the pitch will actually quote. §4.6's `founding_*` should read "≈62% of list, priced at £49 / £99" rather than "50%".
+
+7. **Platform: Cloudflare, with D1 replacing Postgres for V1.** Costed at **$9.56/month** all-in against a $10 target (INFRA.md, 30 Aug 2026). Workers Paid is the only fixed cost at $5; R2, D1, Cron Triggers, Static Assets and Email Routing all sit inside free tiers at this scale, and the domain is ~$0.85 at Registrar's at-cost pricing.
+
+   This overrides spec §5.2's "Postgres 16, SQLAlchemy + Alembic" and §2.13's managed-Postgres bullet. The written reason spec §5.2 asks for: a managed Postgres at ~£20/month is **twice the entire infrastructure budget**, and at 80 subscribers and ~4,500 events a month, D1's free tier (5 GB, 5M row reads/day) is not remotely stretched. D1 keeps SQLAlchemy usable and keeps PITR, so the §9 backup guarantee survives.
+
+   What it costs us: no PostGIS (see §2.12 as amended), and SQLite's type affinity rather than Postgres types — so the §2.1–2.3 schema fixes need `TEXT`-encoded uuids and explicit `CHECK` constraints where Postgres would have given us native types. **Revisit at ~10,000 subscribers or when the radius query stops being fast**, not before.
+
+8. **Email: Resend at launch, not Postmark.** Spec §5.2 mandates Postmark; its cheapest paid plan is **$15/month**, which breaks the budget on its own, and its free tier is 100 emails/month against a measured need of ~260 at 20 subscribers and ~1,030 at 80. Resend's free tier is 3,000/month (100/day), which covers roughly 150 subscribers. Amazon SES at $0.10/1,000 is the scale-up.
+
+   This is a cost decision, not a quality judgement — Postmark's deliverability reputation is worth paying for once there is a business to protect, and moving back is a one-file change if the sending domain has been warmed properly. **§2.13's rule is untouched: Phase 0 pitch emails go by hand from a normal mailbox, through none of these.**
+
+9. **The pipeline splits at the text-dump cache, because Python Workers cannot run pdfplumber.** Cloudflare's Python Workers run on **Pyodide** — pure-Python and PyEmscripten wheels only. `pdfplumber` → `pdfminer.six` → `cryptography` (Rust) and `pypdfium2` (native C). This is a packaging boundary, not a configuration problem, and **no future session should spend time trying to configure around it.**
+
+   It costs less than it sounds, because `haulier dump` already caches per-page text at `data/text/{region}/{release}.json.gz` keyed by the PDF's SHA-256 — which is exactly the right seam. PDF→text runs in a Cloudflare Container on the existing image; everything downstream (heading analysis, licence harvest, LLM extraction, lead normalisation, digest and CSV rendering) is JSON and Jinja2, and runs on Workers unmodified.
+
+   Measured: **0.79 s per release, 41 ms/page** over 8 sampled releases — 28 vCPU-seconds/month ongoing, against the **375 vCPU-minutes** Workers Paid already includes. That is 0.13% of the allowance. Containers are effectively free here; the $5 plan fee is the whole cost. Use a `basic` instance (¼ vCPU, 1 GiB); nothing measured justifies larger.
+
+10. **Extraction model: costed, still not decided** — decision 4 stands, and Stage 4 still owns the call. The numbers now exist so it is an informed one. At 35 releases/month, ~11.7k input and ~18.9k output tokens each: Haiku 4.5 $3.71/mo standard, Sonnet 5 $7.42, Opus 5 $18.55; Batch API halves each.
+
+    One structural finding worth carrying forward: **output tokens dominate** (660k out against 410k in), because the extracted JSON *is* the product. So prompt caching — normally the first cost lever — saves about $0.20/month here. Model choice is the lever.
+
+    A useful coincidence: Haiku 4.5 on the standard API costs the same as Sonnet 5 on batch ($3.71), but returns synchronously. The Batch API's 24-hour window would consume the whole of spec §7's 24-hour SLO, which alarms at 18 — so **batch is right for the one-off backfill (~$14.31) and wrong for the weekly cycle.**
+
+    **Do not let the $10 target pick the model.** Spec §7 gates extraction at ≥99.5% licence-number precision; whether Haiku 4.5 clears that is a golden-set question for Stage 1. If it does not, Sonnet 5 puts us $3.27 over budget, which against three subscribers at £49 is a rounding error.
 
 ### Still open
 

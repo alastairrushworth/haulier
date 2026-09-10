@@ -25,7 +25,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -122,6 +122,26 @@ def _attachment_from_json(region_slug: str, raw: dict[str, Any]) -> Attachment:
     )
 
 
+class HasContent(Protocol):
+    """The part of an HTTP response the fetcher uses."""
+
+    @property
+    def content(self) -> bytes: ...
+
+
+class ReleaseSource(Protocol):
+    """What `capture` needs from a client — `GovUkClient` is the production one.
+
+    Naming the dependency structurally keeps the fetcher testable without a
+    network, and leaves room for the National Archives crawler that Phase 3
+    will need for pre-2026 releases.
+    """
+
+    def attachments(self, area: TrafficArea) -> list[Attachment]: ...
+
+    def get(self, url: str) -> HasContent: ...
+
+
 @dataclass
 class GovUkClient:
     """Polite, retrying HTTP client. Identifies honestly per spec §8.2."""
@@ -146,23 +166,30 @@ class GovUkClient:
         self._client.close()
 
     def get(self, url: str) -> httpx.Response:
+        """GET with backoff on transport faults and 5xx only.
+
+        A 4xx is an answer, not a blip: a moved or withdrawn attachment returns
+        404 on every attempt, so retrying it buys nothing and costs the full
+        backoff before the caller can react.
+        """
         cfg = settings()
         last: Exception | None = None
         for attempt in range(cfg.http_retries):
             try:
                 response = self._client.get(url)
-                if response.status_code >= 500:
-                    raise httpx.HTTPStatusError(
-                        f"{response.status_code} from {url}",
-                        request=response.request,
-                        response=response,
-                    )
-                response.raise_for_status()
-                return response
-            except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            except httpx.TransportError as exc:
                 last = exc
-                if attempt < cfg.http_retries - 1:
-                    time.sleep(2**attempt)
+            else:
+                if response.status_code < 500:
+                    response.raise_for_status()
+                    return response
+                last = httpx.HTTPStatusError(
+                    f"{response.status_code} from {url}",
+                    request=response.request,
+                    response=response,
+                )
+            if attempt < cfg.http_retries - 1:
+                time.sleep(2**attempt)
         assert last is not None
         raise last
 
