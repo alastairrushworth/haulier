@@ -27,3 +27,6 @@ data/
 
 # OS
 .DS_Store
+
+# Built landing site. Regenerate with `haulier build-site`.
+site/dist/

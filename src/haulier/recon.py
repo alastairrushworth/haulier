@@ -21,7 +21,23 @@ from .sources import TrafficArea
 
 #: PLAN.md §2.10 detector 1 — statutory section marker with the outcome phrase
 #: on the same line, e.g. "S13 - Application granted as applied for".
-MARKER_RE = re.compile(r"^\s*S(\d{1,3}[A-Z]?)\s*[-–—]\s*(\S.*)$")
+#:
+#: `Sch.3` (transport-manager repute under Schedule 3) is a marker too, and the
+#: most frequent heading in the whole corpus — 200 occurrences across 29 of the
+#: 31 East of England releases. An `S\d` anchor cannot see it, so it was missing
+#: from the taxonomy this seeds. `Sch\.?\s?3` matches it without swallowing the
+#: Schedule 4 prose paragraph, which carries no separator after the number.
+MARKER_RE = re.compile(r"^\s*(S|Sch)\s*\.?\s*(\d{1,3}[A-Z]?)\s*[-–—]\s*(\S.*)$")
+
+
+def marker_of(line: str) -> str | None:
+    """'Sch.3 - …' → 'Sch.3'; 'S13 - …' → 'S13'; prose → None."""
+    match = MARKER_RE.match(line)
+    if not match:
+        return None
+    prefix, number = match.group(1), match.group(2)
+    return f"Sch.{number}" if prefix == "Sch" else f"S{number}"
+
 
 #: The spec's licence-number shape, held so far against ~2,900 observations.
 LICENCE_RE = re.compile(r"\b([OP][A-Z])(\d{6,7})\b")
@@ -39,9 +55,7 @@ def _normalise(text: str) -> str:
 
 def _body_size(pages: list[dict[str, Any]]) -> float | None:
     """Modal line size for one release — the baseline the outlier test needs."""
-    sizes = Counter(
-        line["s"] for page in pages for line in page["lines"] if line["s"] is not None
-    )
+    sizes = Counter(line["s"] for page in pages for line in page["lines"] if line["s"] is not None)
     return sizes.most_common(1)[0][0] if sizes else None
 
 
@@ -65,9 +79,8 @@ def analyse_headings(dumps: list[dict[str, Any]]) -> HeadingStats:
                 if len(text) < 4 or not _WORDY.search(text):
                     continue
 
-                match = MARKER_RE.match(text)
-                if match:
-                    marker = f"S{match.group(1)}"
+                marker = marker_of(text)
+                if marker:
                     stats.markers[marker] += 1
                     stats.marker_releases.setdefault(marker, set()).add(release)
                     stats.headings[text] += 1
@@ -144,6 +157,12 @@ def foreign_licences(stats: LicenceStats, area: TrafficArea) -> list[tuple[str, 
     )
 
 
+def _marker_sort_key(marker: str) -> tuple[str, int, str]:
+    """Group by statute (S before Sch), then numerically — S9 before S13."""
+    digits = "".join(ch for ch in marker if ch.isdigit())
+    return ("Sch" if marker.startswith("Sch") else "S", int(digits or 0), marker)
+
+
 def headings_payload(stats: HeadingStats, min_releases: int = 2) -> dict[str, Any]:
     """JSON-ready summary. Headings seen in a single release are dropped —
     they are overwhelmingly operator names and dates, not section structure."""
@@ -154,7 +173,7 @@ def headings_payload(stats: HeadingStats, min_releases: int = 2) -> dict[str, An
                 "occurrences": stats.markers[marker],
                 "releases": len(stats.marker_releases[marker]),
             }
-            for marker in sorted(stats.markers, key=lambda m: (len(m), m))
+            for marker in sorted(stats.markers, key=_marker_sort_key)
         },
         "headings": [
             {
@@ -163,7 +182,7 @@ def headings_payload(stats: HeadingStats, min_releases: int = 2) -> dict[str, An
                 "releases": len(stats.heading_releases[text]),
             }
             for text, count in stats.headings.most_common()
-            if len(stats.heading_releases[text]) >= min_releases or MARKER_RE.match(text)
+            if len(stats.heading_releases[text]) >= min_releases or marker_of(text)
         ],
     }
 

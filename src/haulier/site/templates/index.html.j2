@@ -1,0 +1,114 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ product }} — HGV operator-licence leads, weekly{% endblock %}
+
+{% block body %}
+<div class="hero">
+  <div class="wrap">
+    <h1>Every new haulier in your patch, about nine weeks before their trucks hit the road.</h1>
+    <p>When a business applies for a goods vehicle operator licence, it is about to buy
+      vehicles, finance, insurance, fuel cards, telematics and compliance services.</p>
+    <p>That signal is public — and buried in eight regional PDF streams that nobody reads.
+      We read them all, every week, and send you the ones in your territory.</p>
+    <div class="cta">
+      <a class="btn btn-primary{{ ' btn-stub' if stub.checkout_single }}" href="{{ links.checkout_single }}">Subscribe — one region</a>
+      <a class="btn btn-ghost" href="/sample.html">See a real issue</a>
+    </div>
+  </div>
+</div>
+
+<main>
+  <section class="wrap">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="n">01</div>
+        <h3>We watch all eight traffic areas</h3>
+        <p>The Traffic Commissioners publish <em>Applications &amp; Decisions</em> weekly,
+          per region, as PDFs. We capture every release within hours of publication.</p>
+      </div>
+      <div class="step">
+        <div class="n">02</div>
+        <h3>We structure and check it</h3>
+        <p>Every entry becomes a row: operator, licence, fleet size, operating centres,
+          directors. Extractions are reconciled against the source and sampled by hand.</p>
+      </div>
+      <div class="step">
+        <div class="n">03</div>
+        <h3>You get the ones that matter</h3>
+        <p>An email digest plus a CSV, filtered to your region — ordered so the new
+          applications and expansions are at the top.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <h2>What you get per lead</h2>
+    <div class="scroll">
+      <table>
+        <tr><th>Who</th><td>Operator name, trading name, licence number and type, correspondence address, directors or partners</td></tr>
+        <tr><th>What changed</th><td>New application, variation, grant, surrender, revocation, public inquiry — nine event types, ranked by how much they are worth to you</td></tr>
+        <tr><th>How big</th><td>Vehicles and trailers authorised, every operating centre with its town and postcode</td></tr>
+        <tr><th>Context</th><td>Companies House match where one exists: company number, status, incorporation date, directors, SIC codes</td></tr>
+        <tr><th>Compliance</th><td>A flag marking sole traders and partnerships, so you route those to phone or post rather than cold email</td></tr>
+      </table>
+    </div>
+    <p><a href="/sample.html">Look at a real issue</a> — East of England, {{ sample_leads }} leads.
+      Names are reduced to initials in the public sample; subscribers get them in full.</p>
+  </section>
+
+  <section class="wrap">
+    <h2>Pricing</h2>
+    <div class="prices">
+      <div class="price founding">
+        <div class="badge">Founding — first {{ pricing.founding_seats }}</div>
+        <div class="amount">£{{ pricing.founding_single }}<span> / month</span></div>
+        <ul>
+          <li>One traffic area</li>
+          <li>Price locked for {{ pricing.founding_months }} months</li>
+          <li>In exchange for a testimonial and the odd feedback call</li>
+        </ul>
+        <a class="btn btn-primary{{ ' btn-stub' if stub.checkout_founding }}" href="{{ links.checkout_founding }}"
+           style="background:var(--navy);color:#fff;">Take a founding seat</a>
+      </div>
+      <div class="price">
+        <div class="amount">£{{ pricing.all_regions }}<span> / month</span></div>
+        <ul>
+          <li>All eight traffic areas</li>
+          <li>One combined email per publication day</li>
+          <li>Annual at {{ pricing.annual_months }}× monthly</li>
+        </ul>
+        <a class="btn btn-primary{{ ' btn-stub' if stub.checkout_all }}" href="{{ links.checkout_all }}"
+           style="background:var(--navy);color:#fff;">Subscribe — all regions</a>
+      </div>
+    </div>
+    <p class="updated">List price is £{{ pricing.single_region }}/month for a single region once the
+      founding seats are gone. Cancel any time; no contract, no setup fee.</p>
+  </section>
+
+  <section class="wrap">
+    <h2>Questions</h2>
+    <details><summary>Where does the data come from?</summary>
+      <p>The Traffic Commissioners' <em>Applications &amp; Decisions</em> publications on GOV.UK,
+        enriched with Companies House. Both are public records under the Open Government Licence.
+        We do not scrape anyone's private data and we do not buy lists.</p></details>
+    <details><summary>How fresh is it?</summary>
+      <p>Publications go out weekly per region on a region-specific weekday. We aim to have the
+        digest in your inbox within 24 hours of a release appearing.</p></details>
+    <details><summary>How accurate is it?</summary>
+      <p>Every extraction is reconciled against the licence numbers in the source document, and a
+        risk-ranked sample is reviewed by a human before anything ships. We publish our accuracy
+        targets and we will tell you when we get something wrong. It is provided as-is — verify
+        anything you are about to spend money on.</p></details>
+    <details><summary>Can I filter by distance rather than region?</summary>
+      <p>Yes — you can set a postcode and a radius instead of, or as well as, a traffic area. A
+        lead matches if any of its operating centres falls inside your radius.</p></details>
+    <details><summary>Is this legal to use for outreach?</summary>
+      <p>The data is public record and we process it under legitimate interests. Your outreach is
+        your responsibility: UK PECR treats sole traders and partnerships differently from
+        corporate subscribers, so we mark them in every CSV. We are not your lawyers.</p></details>
+    <details><summary>I'm named in your data. Take me off.</summary>
+      <p>Email <a href="mailto:{{ objection_email }}">{{ objection_email }}</a> and we will suppress
+        you from future digests. See the <a href="/privacy.html">privacy notice</a>.</p></details>
+  </section>
+</main>
+{% endblock %}
