@@ -5,20 +5,21 @@ issue, Stripe links, the founding offer, an FAQ and legal pages; PLAN §2.11
 pulls the privacy notice and a working objection route forward to Stage 0,
 because the pilot digest already sends real directors' names to prospects.
 
-Everything that would cost money or need an account is a **placeholder**. A
-build with any placeholder unresolved is a dry run: it renders a banner naming
-what is missing, marks every stub link, and sets `noindex`. A landing page that
-looks live but has dead Stripe links is worse than an obviously unfinished one,
-so the dry-run state is loud rather than subtle.
+Everything that would cost money, need an account, or need a solicitor is a
+**placeholder**. A build with any placeholder unresolved is a dry run: it
+renders a banner naming what is missing, marks every stub link, and sets
+`noindex`. A landing page that looks live but has dead Stripe links — or a
+privacy notice whose data controller is "[ENTITY NAME]" — is worse than an
+obviously unfinished one, so the dry-run state is loud rather than subtle.
 
-Resolve a placeholder by setting its environment variable (see `.env.example`).
-When all of them are set the banner disappears on its own — there is no
-separate "production mode" flag to forget to flip.
+Resolve a placeholder by setting its `HAULIER_*` variable, in the environment
+or in `.env` (see `.env.example`); they are read through `config.Settings` like
+every other setting. When all of them are set the banner disappears on its
+own — there is no separate "production mode" flag to forget to flip.
 """
 
 from __future__ import annotations
 
-import os
 import shutil
 from dataclasses import dataclass
 from datetime import date
@@ -39,36 +40,69 @@ DEFAULT_SAMPLE = Path("data/pilot/digest_5599_redacted.html")
 @dataclass(frozen=True, slots=True)
 class Placeholder:
     key: str
-    env: str
+    setting: str
+    """Attribute on `config.Settings`; the env var is HAULIER_<SETTING>."""
     note: str
     stub: str
 
+    @property
+    def env(self) -> str:
+        return f"HAULIER_{self.setting.upper()}"
+
     def resolve(self) -> tuple[str, bool]:
-        """(value, is_stub). Falls back to the stub when the env var is unset."""
-        value = os.environ.get(self.env, "").strip()
+        """(value, is_stub). Falls back to the stub when the setting is empty."""
+        value = str(getattr(settings(), self.setting) or "").strip()
         return (value, False) if value else (self.stub, True)
 
 
-PLACEHOLDERS: tuple[Placeholder, ...] = (
+CHECKOUT_PLACEHOLDERS: tuple[Placeholder, ...] = (
     Placeholder(
         "checkout_single",
-        "HAULIER_CHECKOUT_SINGLE_URL",
+        "checkout_single_url",
         "Stripe Checkout link — single region, list price",
         "#stub-checkout-single-region",
     ),
     Placeholder(
         "checkout_all",
-        "HAULIER_CHECKOUT_ALL_URL",
+        "checkout_all_url",
         "Stripe Checkout link — all regions",
         "#stub-checkout-all-regions",
     ),
     Placeholder(
         "checkout_founding",
-        "HAULIER_CHECKOUT_FOUNDING_URL",
+        "checkout_founding_url",
         "Stripe Checkout link — founding rate",
         "#stub-checkout-founding",
     ),
 )
+
+#: The privacy notice and terms are not publishable with these blank, and the
+#: "still needs a solicitor" caveat they carry while `dry_run` is true must not
+#: vanish just because the Stripe links arrived.
+LEGAL_PLACEHOLDERS: tuple[Placeholder, ...] = (
+    Placeholder(
+        "legal_entity",
+        "legal_entity",
+        "Data controller's legal name — privacy notice and terms",
+        "[ENTITY NAME — set HAULIER_LEGAL_ENTITY]",
+    ),
+    Placeholder(
+        "legal_processors",
+        "legal_processors",
+        "Where personal data is processed — each processor and its location",
+        "We use Cloudflare for hosting and storage, and Stripe for payments. "
+        "[Confirm and list each processor and its location — set HAULIER_LEGAL_PROCESSORS.]",
+    ),
+    Placeholder(
+        "legal_jurisdiction",
+        "legal_jurisdiction",
+        "Governing law for the terms",
+        "These terms are governed by the law of England and Wales. "
+        "[Confirm — set HAULIER_LEGAL_JURISDICTION.]",
+    ),
+)
+
+PLACEHOLDERS: tuple[Placeholder, ...] = CHECKOUT_PLACEHOLDERS + LEGAL_PLACEHOLDERS
 
 #: Prices live here rather than in the templates so the site, the digest and
 #: PLAN §4 decision 6 cannot drift apart.
@@ -79,19 +113,6 @@ PRICING = {
     "founding_seats": 10,
     "founding_months": 12,
     "annual_months": 10,
-}
-
-LEGAL_STUB = {
-    "entity": "[ENTITY NAME — set HAULIER_LEGAL_ENTITY]",
-    "address": "",
-    "processors": (
-        "We use Cloudflare for hosting and storage, and Stripe for payments. "
-        "[Confirm and list each processor and its location before going live.]"
-    ),
-    "jurisdiction": (
-        "These terms are governed by the law of England and Wales. "
-        "[Confirm — set HAULIER_LEGAL_JURISDICTION.]"
-    ),
 }
 
 
@@ -112,13 +133,6 @@ def _env() -> Environment:
         loader=FileSystemLoader(TEMPLATES),
         autoescape=select_autoescape(["html", "j2"]),
     )
-
-
-def _legal() -> dict[str, str]:
-    return {
-        key: os.environ.get(f"HAULIER_LEGAL_{key.upper()}", "").strip() or stub
-        for key, stub in LEGAL_STUB.items()
-    }
 
 
 def _sample_lead_count(sample: Path | None) -> str:
@@ -155,6 +169,12 @@ def build_site(
         if is_stub:
             unresolved.append(placeholder)
 
+    legal = {
+        "entity": values["legal_entity"],
+        "address": settings().legal_address.strip(),  # optional, so not a placeholder
+        "processors": values["legal_processors"],
+        "jurisdiction": values["legal_jurisdiction"],
+    }
     context: dict[str, Any] = {
         "product": "FirstMover",
         "links": values,
@@ -162,7 +182,7 @@ def build_site(
         "unresolved": unresolved,
         "dry_run": bool(unresolved),
         "pricing": PRICING,
-        "legal": _legal(),
+        "legal": legal,
         "objection_email": settings().objection_route,
         "today": (today or date.today()).strftime("%-d %B %Y"),
         "sample_leads": _sample_lead_count(sample_source),

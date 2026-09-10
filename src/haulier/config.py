@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     """Published privacy notice. Empty until it exists — the footer says so in
     prose rather than linking somewhere that 404s in a prospect's inbox."""
 
+    # Landing-site placeholders (site/build.py). Each one that is empty keeps
+    # the build in its loud dry-run state: banner, stubbed links, noindex.
+    checkout_single_url: str = ""
+    """Stripe Checkout link — single region at list price."""
+    checkout_all_url: str = ""
+    """Stripe Checkout link — all regions."""
+    checkout_founding_url: str = ""
+    """Stripe Checkout link — founding rate (PLAN §4 decision 6)."""
+    legal_entity: str = ""
+    """The data controller's legal name — privacy notice and terms."""
+    legal_address: str = ""
+    """Registered address. Optional; the notice omits the sentence when empty."""
+    legal_processors: str = ""
+    """Where personal data is processed — each processor and its location."""
+    legal_jurisdiction: str = ""
+    """Governing law for the terms."""
+
     @property
     def objection_route(self) -> str:
         return self.objection_email or self.contact_email
